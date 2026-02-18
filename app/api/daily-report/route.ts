@@ -74,23 +74,14 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
       );
     }
 
-    // Validate site exists and is active
-    const { data: site, error: siteError } = await supabaseAdmin
-      .from('sites')
-      .select('id')
-      .eq('organisation_id', org.id)
-      .eq('site_number', siteNumber)
-      .eq('active', true)
-      .single();
-
-    if (siteError || !site) return jsonError('Invalid or inactive site number/name', 404);
-
+    // Site Number/Name is free text (no lookup); later can link to Client Connect / sites
     // Create daily report
     const { data: report, error: reportError } = await supabaseAdmin
       .from('daily_reports')
       .insert({
         organisation_id: org.id,
-        site_id: site.id,
+        site_id: null,
+        site_identifier: siteNumber,
         crew_name: crewName,
         summary,
         finished_plan: finishedPlanBool,
@@ -112,7 +103,7 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
     for (const photo of photos) {
       const fileExt = photo.name.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${randomUUID()}.${fileExt}`;
-      const storagePath = `${orgSlug}/${site.id}/${report.id}/${fileName}`;
+      const storagePath = `${orgSlug}/${report.id}/${fileName}`;
 
       const arrayBuffer = await photo.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);

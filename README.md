@@ -52,9 +52,11 @@ Run the SQL schema in your Supabase SQL editor:
 This creates:
 - `organisations` table
 - `sites` table
-- `daily_reports` table
+- `daily_reports` table (with `site_identifier` free text and optional `site_id` for later Client Connect linking)
 - `daily_report_photos` table
 - Required indexes
+
+If `daily_reports` already exists, run the migration block at the bottom of `supabase/schema.sql` to add `site_identifier` and make `site_id` nullable.
 
 #### Storage Bucket
 
@@ -83,7 +85,7 @@ SELECT
 FROM organisations 
 WHERE slug = 'madebymobbs';
 
--- Add more sites as needed (e.g. numeric or name like 'North Site')
+-- Add more sites as needed (e.g. numeric or name like 'North Site', 'Brougham St')
 INSERT INTO sites (organisation_id, site_number, site_code_hash, site_name, active)
 SELECT 
   id,
@@ -92,7 +94,20 @@ SELECT
   'Site 025',
   true
 FROM organisations 
-WHERE slug = 'madebymobbs';
+WHERE slug = 'madebymobbs'
+ON CONFLICT (organisation_id, site_number) DO NOTHING;
+
+-- Example: add a named site (site lookup is case-insensitive)
+INSERT INTO sites (organisation_id, site_number, site_code_hash, site_name, active)
+SELECT 
+  id,
+  'Brougham St',
+  encode(digest('Brougham St', 'sha256'), 'hex'),
+  'Brougham St',
+  true
+FROM organisations 
+WHERE slug = 'madebymobbs'
+ON CONFLICT (organisation_id, site_number) DO NOTHING;
 ```
 
 ### 4. Local Development
