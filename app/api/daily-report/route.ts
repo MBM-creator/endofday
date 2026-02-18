@@ -4,62 +4,54 @@ import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
 
-interface FormDataFields {
-  orgSlug: string;
-  siteNumber: string;
-  summary: string;
-  finishedPlan: string;
-  notFinishedWhy?: string;
-  catchupPlan?: string;
-  siteLeftCleanNotes: string;
+const BUCKET = 'daily-reports';
+
+function jsonError(message: string, status = 400) {
+  return NextResponse.json({ ok: false, message }, { status });
 }
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    
-    // Extract form fields
-    const orgSlug = formData.get('orgSlug') as string;
-    const siteNumber = formData.get('siteNumber') as string;
-    const summary = formData.get('summary') as string;
-    const finishedPlan = formData.get('finishedPlan') as string;
-    const notFinishedWhy = formData.get('notFinishedWhy') as string | null;
-    const catchupPlan = formData.get('catchupPlan') as string | null;
-    const siteLeftCleanNotes = formData.get('siteLeftCleanNotes') as string;
-    
-    // Extract photos
-    const photos: File[] = [];
-    const photoEntries = formData.getAll('photos') as File[];
-    for (const entry of photoEntries) {
-      if (entry instanceof File && entry.size > 0) {
-        photos.push(entry);
-      }
-    }
+
+console.log('API using SUPABASE_URL =', process.env.SUPABASE_URL);
+console.log('orgSlug received =', String(formData.get('orgSlug')));
+
+    // Fields
+    const orgSlug = String(formData.get('orgSlug') ?? '').trim();
+    const crewName = String(formData.get('crewName') ?? '').trim();
+    const siteNumber = String(formData.get('siteNumber') ?? '').trim();
+    const summary = String(formData.get('summary') ?? '').trim();
+    const finishedPlanRaw = String(formData.get('finishedPlan') ?? '').trim();
+    const notFinishedWhy = String(formData.get('notFinishedWhy') ?? '').trim();
+    const catchupPlan = String(formData.get('catchupPlan') ?? '').trim();
+    const siteLeftCleanNotes = String(formData.get('siteLeftCleanNotes') ?? '').trim();
+
+    // Photos
+    const photos = (formData.getAll('photos') as File[]).filter(
+      (f) => f instanceof File && f.size > 0
+    );
 
     // Validation
-    if (!orgSlug || !siteNumber || !summary || !finishedPlan || !siteLeftCleanNotes) {
-      return NextResponse.json(
-        { ok: false, message: 'Missing required fields' },
-        { status: 400 }
-      );
+    if (!orgSlug) return jsonError('Organisation is required');
+    if (!crewName) return jsonError('Crew name is required');
+    if (!siteNumber) return jsonError('Site Number / Name is required');
+    if (!summary) return jsonError("Today's summary is required");
+
+    if (finishedPlanRaw !== 'true' && finishedPlanRaw !== 'false') {
+      return jsonError('Please indicate if you finished everything planned today');
+    }
+    const finishedPlanBool = finishedPlanRaw === 'true';
+
+    if (!finishedPlanBool) {
+      if (!notFinishedWhy) return jsonError('Please explain what was not finished and why');
+      if (!catchupPlan) return jsonError('Please provide a plan to make up the lost time');
     }
 
-    const finishedPlanBool = finishedPlan === 'true';
-    
-    if (!finishedPlanBool) {
-      if (!notFinishedWhy || !catchupPlan) {
-        return NextResponse.json(
-          { ok: false, message: 'notFinishedWhy and catchupPlan are required when finishedPlan is false' },
-          { status: 400 }
-        );
-      }
-    }
+    if (!siteLeftCleanNotes) return jsonError('Please provide notes about site cleanliness');
 
     if (photos.length < 3 || photos.length > 10) {
-      return NextResponse.json(
-        { ok: false, message: 'Must upload between 3 and 10 photos' },
-        { status: 400 }
-      );
+      return jsonError('Must upload between 3 and 10 photos');
     }
 
     // Validate organisation exists
@@ -70,8 +62,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (orgError || !org) {
+      console.error('Org lookup failed:', { orgSlug, orgError, org });
       return NextResponse.json(
-        { ok: false, message: 'Invalid organisation' },
+        {
+          ok: false,
+          message: process.env.NODE_ENV === 'development' && orgError
+            ? `Invalid organisation: ${orgError.message}`
+            : 'Invalid organisation',
+        },
         { status: 404 }
       );
     }
@@ -85,12 +83,7 @@ export async function POST(request: NextRequest) {
       .eq('active', true)
       .single();
 
-    if (siteError || !site) {
-      return NextResponse.json(
-        { ok: false, message: 'Invalid or inactive site number' },
-        { status: 404 }
-      );
-    }
+    if (siteError || !site) return jsonError('Invalid or inactive site number/name', 404);
 
     // Create daily report
     const { data: report, error: reportError } = await supabaseAdmin
@@ -98,64 +91,56 @@ export async function POST(request: NextRequest) {
       .insert({
         organisation_id: org.id,
         site_id: site.id,
-        summary: summary.trim(),
+        crew_name: crewName,
+        summary,
         finished_plan: finishedPlanBool,
-        not_finished_why: notFinishedWhy?.trim() || null,
-        catchup_plan: catchupPlan?.trim() || null,
-        site_left_clean_notes: siteLeftCleanNotes.trim(),
+        not_finished_why: finishedPlanBool ? null : notFinishedWhy,
+        catchup_plan: finishedPlanBool ? null : catchupPlan,
+        site_left_clean_notes: siteLeftCleanNotes,
       })
       .select('id')
       .single();
 
     if (reportError || !report) {
       console.error('Error creating report:', reportError);
-      return NextResponse.json(
-        { ok: false, message: 'Failed to create report' },
-        { status: 500 }
-      );
+      return jsonError('Failed to create report', 500);
     }
 
-    // Upload photos to Supabase Storage
+    // Upload photos (require ALL selected photos succeed)
     const uploadedPaths: string[] = [];
-    const bucketName = 'daily-reports';
 
     for (const photo of photos) {
       const fileExt = photo.name.split('.').pop()?.toLowerCase() || 'jpg';
       const fileName = `${randomUUID()}.${fileExt}`;
       const storagePath = `${orgSlug}/${site.id}/${report.id}/${fileName}`;
 
-      // Convert File to ArrayBuffer
       const arrayBuffer = await photo.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
-      // Upload to Supabase Storage
       const { error: uploadError } = await supabaseAdmin.storage
-        .from(bucketName)
+        .from(BUCKET)
         .upload(storagePath, buffer, {
-          contentType: photo.type,
+          contentType: photo.type || 'image/jpeg',
           upsert: false,
         });
 
       if (uploadError) {
         console.error('Error uploading photo:', uploadError);
-        // Continue with other photos, but log the error
-        continue;
+
+        // Cleanup anything uploaded so far + rollback report
+        for (const path of uploadedPaths) {
+          await supabaseAdmin.storage.from(BUCKET).remove([path]);
+        }
+        await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
+
+        return jsonError('Failed to upload all photos. Please try again.', 500);
       }
 
       uploadedPaths.push(storagePath);
     }
 
-    // If no photos were uploaded successfully, rollback the report
-    if (uploadedPaths.length === 0) {
-      await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
-      return NextResponse.json(
-        { ok: false, message: 'Failed to upload photos' },
-        { status: 500 }
-      );
-    }
-
     // Create photo records
-    const photoRecords = uploadedPaths.map(path => ({
+    const photoRecords = uploadedPaths.map((path) => ({
       report_id: report.id,
       storage_path: path,
     }));
@@ -166,19 +151,17 @@ export async function POST(request: NextRequest) {
 
     if (photosError) {
       console.error('Error creating photo records:', photosError);
-      // Report is already created, but photos might not be linked
-      // This is a partial failure, but we'll still return success
+
+      // Cleanup storage + rollback report to avoid orphaned files
+      await supabaseAdmin.storage.from(BUCKET).remove(uploadedPaths);
+      await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
+
+      return jsonError('Failed to save photo records. Please try again.', 500);
     }
 
-    return NextResponse.json({
-      ok: true,
-      reportId: report.id,
-    });
+    return NextResponse.json({ ok: true, reportId: report.id });
   } catch (error) {
     console.error('Unexpected error:', error);
-    return NextResponse.json(
-      { ok: false, message: 'Internal server error' },
-      { status: 500 }
-    );
+    return jsonError('Internal server error', 500);
   }
 }

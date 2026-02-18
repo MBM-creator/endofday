@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import imageCompression from 'browser-image-compression';
 
@@ -12,7 +12,8 @@ interface CompressedPhoto {
 export default function DailyReportPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
-  
+
+  const [crewName, setCrewName] = useState('');
   const [siteNumber, setSiteNumber] = useState('');
   const [summary, setSummary] = useState('');
   const [finishedPlan, setFinishedPlan] = useState<boolean | null>(null);
@@ -23,7 +24,7 @@ export default function DailyReportPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-  
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -64,39 +65,28 @@ export default function DailyReportPage() {
 
   const removePhoto = (index: number) => {
     setPhotos((prev) => {
-      const updated = prev.filter((_, i) => i !== index);
-      updated[index]?.preview && URL.revokeObjectURL(updated[index].preview);
-      return updated;
+      const photoToRemove = prev[index];
+      if (photoToRemove?.preview) URL.revokeObjectURL(photoToRemove.preview);
+      return prev.filter((_, i) => i !== index);
     });
   };
 
   const validateForm = (): string | null => {
-    if (!siteNumber.trim()) {
-      return 'Site Number is required';
+    if (!crewName.trim()) return 'Crew name is required';
+    if (!siteNumber.trim()) return 'Site Number / Name is required';
+    if (!summary.trim()) return "Today's summary is required";
+    if (finishedPlan === null) return 'Please indicate if you finished everything planned today';
+
+    if (finishedPlan === false) {
+      if (!notFinishedWhy.trim()) return 'Please explain what was not finished and why';
+      if (!catchupPlan.trim()) return 'Please provide a plan to make up the lost time';
     }
-    if (!summary.trim()) {
-      return 'Today\'s summary is required';
-    }
-    if (finishedPlan === null) {
-      return 'Please indicate if you finished everything planned today';
-    }
-    if (!finishedPlan) {
-      if (!notFinishedWhy.trim()) {
-        return 'Please explain what was not finished and why';
-      }
-      if (!catchupPlan.trim()) {
-        return 'Please provide a plan to make up the lost time';
-      }
-    }
-    if (!siteLeftCleanNotes.trim()) {
-      return 'Please provide notes about site cleanliness';
-    }
-    if (photos.length < 3) {
-      return 'At least 3 photos are required';
-    }
-    if (photos.length > 10) {
-      return 'Maximum 10 photos allowed';
-    }
+
+    if (!siteLeftCleanNotes.trim()) return 'Please provide notes about site cleanliness';
+
+    if (photos.length < 3) return 'At least 3 photos are required';
+    if (photos.length > 10) return 'Maximum 10 photos allowed';
+
     return null;
   };
 
@@ -116,15 +106,22 @@ export default function DailyReportPage() {
     try {
       const formData = new FormData();
       formData.append('orgSlug', orgSlug);
+      formData.append('crewName', crewName.trim());
       formData.append('siteNumber', siteNumber.trim());
       formData.append('summary', summary.trim());
       formData.append('finishedPlan', finishedPlan!.toString());
-      if (!finishedPlan) {
+
+      if (finishedPlan === false) {
         formData.append('notFinishedWhy', notFinishedWhy.trim());
         formData.append('catchupPlan', catchupPlan.trim());
+      } else {
+        // Ensure server doesn't accidentally see stale text from previous attempt
+        formData.append('notFinishedWhy', '');
+        formData.append('catchupPlan', '');
       }
+
       formData.append('siteLeftCleanNotes', siteLeftCleanNotes.trim());
-      
+
       photos.forEach((photo) => {
         formData.append('photos', photo.file);
       });
@@ -141,15 +138,20 @@ export default function DailyReportPage() {
       }
 
       setSuccess(true);
+
       // Reset form
+      setCrewName('');
       setSiteNumber('');
       setSummary('');
       setFinishedPlan(null);
       setNotFinishedWhy('');
       setCatchupPlan('');
       setSiteLeftCleanNotes('');
-      setPhotos([]);
+
+      // Revoke previews + clear photos
       photos.forEach((p) => URL.revokeObjectURL(p.preview));
+      setPhotos([]);
+
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
@@ -178,17 +180,33 @@ export default function DailyReportPage() {
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Site Number */}
+          {/* Crew Name */}
+          <div>
+            <label htmlFor="crewName" className="block text-sm font-medium text-gray-700 mb-1">
+              Crew name <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              id="crewName"
+              value={crewName}
+              onChange={(e) => setCrewName(e.target.value)}
+              placeholder="Crew 1 / Steve / Team A"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              required
+            />
+          </div>
+
+          {/* Site Number / Name */}
           <div>
             <label htmlFor="siteNumber" className="block text-sm font-medium text-gray-700 mb-1">
-              Site Number <span className="text-red-500">*</span>
+              Site Number / Name <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               id="siteNumber"
               value={siteNumber}
               onChange={(e) => setSiteNumber(e.target.value)}
-              placeholder="024"
+              placeholder="e.g. 024 or North Site"
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               required
             />
@@ -300,9 +318,7 @@ export default function DailyReportPage() {
               onChange={handlePhotoSelect}
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             />
-            <p className="mt-1 text-sm text-gray-500">
-              Minimum 3 photos, maximum 10 photos required
-            </p>
+            <p className="mt-1 text-sm text-gray-500">Minimum 3 photos, maximum 10 photos required</p>
 
             {/* Photo previews */}
             {photos.length > 0 && (
@@ -318,6 +334,7 @@ export default function DailyReportPage() {
                       type="button"
                       onClick={() => removePhoto(index)}
                       className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Remove photo"
                     >
                       ×
                     </button>

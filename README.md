@@ -72,21 +72,23 @@ Run these SQL commands in Supabase SQL editor to create initial data:
 INSERT INTO organisations (slug, name) 
 VALUES ('madebymobbs', 'Made By Mobbs');
 
--- Create sites (example)
-INSERT INTO sites (organisation_id, site_number, site_name, active)
+-- Create sites (example; site_number is alphanumeric; site_code_hash is generated from it)
+INSERT INTO sites (organisation_id, site_number, site_code_hash, site_name, active)
 SELECT 
   id,
   '024',
+  encode(digest('024', 'sha256'), 'hex'),
   'Site 024',
   true
 FROM organisations 
 WHERE slug = 'madebymobbs';
 
--- Add more sites as needed
-INSERT INTO sites (organisation_id, site_number, site_name, active)
+-- Add more sites as needed (e.g. numeric or name like 'North Site')
+INSERT INTO sites (organisation_id, site_number, site_code_hash, site_name, active)
 SELECT 
   id,
   '025',
+  encode(digest('025', 'sha256'), 'hex'),
   'Site 025',
   true
 FROM organisations 
@@ -128,7 +130,7 @@ Visit `http://localhost:3000` or go directly to `http://localhost:3000/t/madebym
 
 ## Form Fields
 
-1. **Site Number** (required) - Text input, e.g., "024"
+1. **Site Number / Name** (required) - Text input; alphanumeric (e.g. "024", "North Site")
 2. **Today's Summary** (required) - Textarea
 3. **Did we finish everything planned today?** (required) - Yes/No buttons
 4. **If No:**
@@ -143,7 +145,7 @@ Visit `http://localhost:3000` or go directly to `http://localhost:3000/t/madebym
 
 Accepts `multipart/form-data` with:
 - `orgSlug` (string, required)
-- `siteNumber` (string, required)
+- `siteNumber` (string, required – alphanumeric site number or name)
 - `summary` (string, required)
 - `finishedPlan` (string: "true" or "false", required)
 - `notFinishedWhy` (string, required if finishedPlan=false)
