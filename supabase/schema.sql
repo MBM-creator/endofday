@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS sites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
   site_number TEXT NOT NULL,
+  site_code_hash TEXT NOT NULL,
   site_name TEXT,
   active BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -50,3 +51,12 @@ CREATE INDEX IF NOT EXISTS idx_daily_reports_organisation_id ON daily_reports(or
 CREATE INDEX IF NOT EXISTS idx_daily_reports_site_id ON daily_reports(site_id);
 CREATE INDEX IF NOT EXISTS idx_daily_reports_submitted_at ON daily_reports(submitted_at);
 CREATE INDEX IF NOT EXISTS idx_daily_report_photos_report_id ON daily_report_photos(report_id);
+
+-- Function to generate site_code_hash (if you need it)
+-- This creates a hash from site_number for lookup/security purposes
+CREATE OR REPLACE FUNCTION generate_site_code_hash(site_code TEXT)
+RETURNS TEXT AS $$
+BEGIN
+  RETURN encode(digest(site_code, 'sha256'), 'hex');
+END;
+$$ LANGUAGE plpgsql;
