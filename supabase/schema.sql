@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS organisations (
 CREATE TABLE IF NOT EXISTS sites (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
+  -- site_number: alphanumeric site identifier (e.g. 024, North Site, A1)
   site_number TEXT NOT NULL,
   site_code_hash TEXT NOT NULL,
   site_name TEXT,
