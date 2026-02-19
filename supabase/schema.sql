@@ -23,10 +23,13 @@ CREATE TABLE IF NOT EXISTS sites (
 );
 
 -- Daily reports table
+-- site_id is nullable: when Site Number/Name is free text, store it in site_identifier only.
+-- Later (e.g. Client Connect) you can link to sites and set site_id.
 CREATE TABLE IF NOT EXISTS daily_reports (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
-  site_id UUID NOT NULL REFERENCES sites(id) ON DELETE CASCADE,
+  site_id UUID REFERENCES sites(id) ON DELETE SET NULL,
+  site_identifier TEXT NOT NULL,
   submitted_at TIMESTAMPTZ DEFAULT NOW(),
   summary TEXT NOT NULL,
   finished_plan BOOLEAN NOT NULL,
@@ -61,3 +64,9 @@ BEGIN
   RETURN encode(digest(site_code, 'sha256'), 'hex');
 END;
 $$ LANGUAGE plpgsql;
+
+-- Migration for existing databases (run in SQL editor if daily_reports already exists):
+-- ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS site_identifier TEXT;
+-- UPDATE daily_reports SET site_identifier = COALESCE((SELECT s.site_number FROM sites s WHERE s.id = daily_reports.site_id), 'Unknown') WHERE site_identifier IS NULL;
+-- ALTER TABLE daily_reports ALTER COLUMN site_id DROP NOT NULL;
+-- ALTER TABLE daily_reports ALTER COLUMN site_identifier SET NOT NULL;
