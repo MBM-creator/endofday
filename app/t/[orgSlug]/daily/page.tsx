@@ -19,7 +19,7 @@ export default function DailyReportPage() {
   const [finishedPlan, setFinishedPlan] = useState<boolean | null>(null);
   const [notFinishedWhy, setNotFinishedWhy] = useState('');
   const [catchupPlan, setCatchupPlan] = useState('');
-  const [siteLeftCleanNotes, setSiteLeftCleanNotes] = useState('');
+  const [siteLeftClean, setSiteLeftClean] = useState<boolean | null>(null);
   const [photos, setPhotos] = useState<CompressedPhoto[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +82,7 @@ export default function DailyReportPage() {
       if (!catchupPlan.trim()) return 'Please provide a plan to make up the lost time';
     }
 
-    if (!siteLeftCleanNotes.trim()) return 'Please provide notes about site cleanliness';
+    if (siteLeftClean === null) return 'Please indicate if the site was left clean / tools in site box / materials under cover';
 
     if (photos.length < 3) return 'At least 3 photos are required';
     if (photos.length > 10) return 'Maximum 10 photos allowed';
@@ -120,7 +120,7 @@ export default function DailyReportPage() {
         formData.append('catchupPlan', '');
       }
 
-      formData.append('siteLeftCleanNotes', siteLeftCleanNotes.trim());
+      formData.append('siteLeftClean', siteLeftClean!.toString());
 
       photos.forEach((photo) => {
         formData.append('photos', photo.file);
@@ -146,7 +146,7 @@ export default function DailyReportPage() {
       setFinishedPlan(null);
       setNotFinishedWhy('');
       setCatchupPlan('');
-      setSiteLeftCleanNotes('');
+      setSiteLeftClean(null);
 
       // Revoke previews + clear photos
       photos.forEach((p) => URL.revokeObjectURL(p.preview));
@@ -191,7 +191,7 @@ export default function DailyReportPage() {
               value={crewName}
               onChange={(e) => setCrewName(e.target.value)}
               placeholder="Crew 1 / Steve / Team A"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
               required
             />
           </div>
@@ -207,7 +207,7 @@ export default function DailyReportPage() {
               value={siteNumber}
               onChange={(e) => setSiteNumber(e.target.value)}
               placeholder="e.g. 024 or North Site"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
               required
             />
           </div>
@@ -222,7 +222,8 @@ export default function DailyReportPage() {
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               rows={4}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="What did you achieve today - be precise about tasks completed."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
               required
             />
           </div>
@@ -238,7 +239,7 @@ export default function DailyReportPage() {
                 onClick={() => setFinishedPlan(true)}
                 className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
                   finishedPlan === true
-                    ? 'bg-blue-600 text-white border-blue-600'
+                    ? 'bg-[#698F00] text-white border-[#698F00]'
                     : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
                 }`}
               >
@@ -249,7 +250,7 @@ export default function DailyReportPage() {
                 onClick={() => setFinishedPlan(false)}
                 className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
                   finishedPlan === false
-                    ? 'bg-blue-600 text-white border-blue-600'
+                    ? 'bg-[#698F00] text-white border-[#698F00]'
                     : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
                 }`}
               >
@@ -260,7 +261,7 @@ export default function DailyReportPage() {
 
           {/* Conditional fields when No */}
           {finishedPlan === false && (
-            <div className="space-y-4 pl-4 border-l-4 border-blue-500">
+            <div className="space-y-4 pl-4 border-l-4 border-[#698F00]">
               <div>
                 <label htmlFor="notFinishedWhy" className="block text-sm font-medium text-gray-700 mb-1">
                   What was not finished and why? <span className="text-red-500">*</span>
@@ -270,7 +271,8 @@ export default function DailyReportPage() {
                   value={notFinishedWhy}
                   onChange={(e) => setNotFinishedWhy(e.target.value)}
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="List the tasks that were on the plan that did not get completed and why"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
                   required
                 />
               </div>
@@ -283,26 +285,43 @@ export default function DailyReportPage() {
                   value={catchupPlan}
                   onChange={(e) => setCatchupPlan(e.target.value)}
                   rows={3}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="How can we get the project back on track so we can finish the project on time?"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
                   required
                 />
               </div>
             </div>
           )}
 
-          {/* Site Left Clean Notes */}
+          {/* Site Left Clean */}
           <div>
-            <label htmlFor="siteLeftCleanNotes" className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
               Site left clean / tools in site box / materials under cover <span className="text-red-500">*</span>
             </label>
-            <textarea
-              id="siteLeftCleanNotes"
-              value={siteLeftCleanNotes}
-              onChange={(e) => setSiteLeftCleanNotes(e.target.value)}
-              rows={3}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setSiteLeftClean(true)}
+                className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                  siteLeftClean === true
+                    ? 'bg-[#698F00] text-white border-[#698F00]'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                Yes
+              </button>
+              <button
+                type="button"
+                onClick={() => setSiteLeftClean(false)}
+                className={`flex-1 px-4 py-2 rounded-lg border-2 transition-colors ${
+                  siteLeftClean === false
+                    ? 'bg-[#698F00] text-white border-[#698F00]'
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-gray-400'
+                }`}
+              >
+                No
+              </button>
+            </div>
           </div>
 
           {/* Photos */}
@@ -316,7 +335,7 @@ export default function DailyReportPage() {
               accept="image/*"
               multiple
               onChange={handlePhotoSelect}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
             />
             <p className="mt-1 text-sm text-gray-500">Minimum 3 photos, maximum 10 photos required</p>
 
@@ -348,7 +367,7 @@ export default function DailyReportPage() {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            className="w-full bg-[#698F00] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
             {isSubmitting ? 'Submitting...' : 'Submit Report'}
           </button>

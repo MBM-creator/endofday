@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: "Daily site report submission",
 };
 
+export const viewport = { themeColor: "#0F172A" };
+
 export default function RootLayout({
   children,
 }: Readonly<{

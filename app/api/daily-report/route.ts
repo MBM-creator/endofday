@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { Resend } from 'resend';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
 
 const BUCKET = 'daily-reports';
+const NOTIFY_EMAIL = 'steve@madebymobbs.com.au';
 
 function jsonError(message: string, status = 400) {
   return NextResponse.json({ ok: false, message }, { status });
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 export async function POST(request: NextRequest) {
@@ -25,7 +36,7 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
     const finishedPlanRaw = String(formData.get('finishedPlan') ?? '').trim();
     const notFinishedWhy = String(formData.get('notFinishedWhy') ?? '').trim();
     const catchupPlan = String(formData.get('catchupPlan') ?? '').trim();
-    const siteLeftCleanNotes = String(formData.get('siteLeftCleanNotes') ?? '').trim();
+    const siteLeftCleanRaw = String(formData.get('siteLeftClean') ?? '').trim();
 
     // Photos
     const photos = (formData.getAll('photos') as File[]).filter(
@@ -48,7 +59,11 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
       if (!catchupPlan) return jsonError('Please provide a plan to make up the lost time');
     }
 
-    if (!siteLeftCleanNotes) return jsonError('Please provide notes about site cleanliness');
+    if (siteLeftCleanRaw !== 'true' && siteLeftCleanRaw !== 'false') {
+      return jsonError('Please indicate if the site was left clean / tools in site box / materials under cover');
+    }
+    const siteLeftCleanBool = siteLeftCleanRaw === 'true';
+
 
     if (photos.length < 3 || photos.length > 10) {
       return jsonError('Must upload between 3 and 10 photos');
@@ -87,7 +102,7 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
         finished_plan: finishedPlanBool,
         not_finished_why: finishedPlanBool ? null : notFinishedWhy,
         catchup_plan: finishedPlanBool ? null : catchupPlan,
-        site_left_clean_notes: siteLeftCleanNotes,
+        site_left_clean_notes: siteLeftCleanBool ? 'Yes' : 'No',
       })
       .select('id')
       .single();
@@ -148,6 +163,59 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
       await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
 
       return jsonError('Failed to save photo records. Please try again.', 500);
+    }
+
+    // Build photo links (signed URLs, valid 7 days, so they work for private buckets)
+    const signedUrlExpiry = 60 * 60 * 24 * 7; // 7 days
+    const photoLinks: string[] = [];
+    for (const path of uploadedPaths) {
+      const { data: signed } = await supabaseAdmin.storage.from(BUCKET).createSignedUrl(path, signedUrlExpiry);
+      if (signed?.signedUrl) photoLinks.push(signed.signedUrl);
+    }
+
+    // Send notification email via Resend (non-blocking; report already saved)
+    const apiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'Daily Reports <onboarding@resend.dev>';
+    if (apiKey) {
+      const resend = new Resend(apiKey);
+      const photoListHtml =
+        photoLinks.length > 0
+          ? '<p><strong>Photos (' +
+            photoLinks.length +
+            '):</strong></p><ul>' +
+            photoLinks.map((url, i) => '<li><a href="' + escapeHtml(url) + '">Photo ' + (i + 1) + '</a></li>').join('') +
+            '</ul><p><em>Links expire in 7 days.</em></p>'
+          : '<p><em>Report ID: ' + report.id + ' – ' + photos.length + ' photo(s) in storage (links could not be generated).</em></p>';
+      const html = [
+        '<h2>New daily report submitted</h2>',
+        '<p><strong>Organisation:</strong> ' + escapeHtml(orgSlug) + '</p>',
+        '<p><strong>Crew:</strong> ' + escapeHtml(crewName) + '</p>',
+        '<p><strong>Site:</strong> ' + escapeHtml(siteNumber) + '</p>',
+        '<p><strong>Summary:</strong></p><p>' + escapeHtml(summary) + '</p>',
+        '<p><strong>Finished everything planned?</strong> ' + (finishedPlanBool ? 'Yes' : 'No') + '</p>',
+        ...(finishedPlanBool
+          ? []
+          : [
+              '<p><strong>What was not finished and why:</strong></p><p>' + escapeHtml(notFinishedWhy) + '</p>',
+              '<p><strong>Plan to make up time:</strong></p><p>' + escapeHtml(catchupPlan) + '</p>',
+            ]),
+        '<p><strong>Site left clean / tools in box / materials under cover?</strong> ' + (siteLeftCleanBool ? 'Yes' : 'No') + '</p>',
+        photoListHtml,
+        '<p><em>Report ID: ' + report.id + '</em></p>',
+      ].join('');
+      try {
+        const { error: emailError } = await resend.emails.send({
+          from: fromEmail,
+          to: [NOTIFY_EMAIL],
+          subject: `Daily report: ${siteNumber} – ${crewName}`,
+          html,
+        });
+        if (emailError) console.error('Resend email error:', emailError);
+      } catch (err) {
+        console.error('Failed to send notification email:', err);
+      }
+    } else {
+      console.warn('RESEND_API_KEY not set; skipping notification email');
     }
 
     return NextResponse.json({ ok: true, reportId: report.id });
