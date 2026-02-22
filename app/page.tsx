@@ -10,7 +10,7 @@ export default function Home() {
         </p>
         <Link
           href="/t/madebymobbs/daily"
-          className="inline-block bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+          className="inline-block bg-[#698F00] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#5a7d00] transition-colors"
         >
           Go to Report Form
         </Link>

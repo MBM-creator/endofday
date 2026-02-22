@@ -151,7 +151,7 @@ Visit `http://localhost:3000` or go directly to `http://localhost:3000/t/madebym
 4. **If No:**
    - What was not finished and why? (required)
    - Plan to make up the lost time (required)
-5. **Site left clean / tools in site box / materials under cover** (required) - Textarea
+5. **Site left clean / tools in site box / materials under cover** (required) - Yes/No
 6. **Photos** (required, 3-10 photos) - Multiple file upload
 
 ## API Endpoint
@@ -211,6 +211,7 @@ See `supabase/schema.sql` for the complete schema.
 
 ## Notes
 
+- **PWA / home screen icon:** Placeholder icons are in `public/icons/icon-192.png` (192×192) and `public/icons/icon-512.png` (512×512). To use the real Made By Mobbs logo, replace these files with PNGs of the same sizes.
 - No authentication required (public form)
 - Site number is the only identifier/gate
 - Photos are compressed client-side before upload (maxWidthOrHeight: 2200, quality: 0.82)
