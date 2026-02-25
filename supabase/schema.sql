@@ -57,13 +57,17 @@ CREATE INDEX IF NOT EXISTS idx_daily_reports_submitted_at ON daily_reports(submi
 CREATE INDEX IF NOT EXISTS idx_daily_report_photos_report_id ON daily_report_photos(report_id);
 
 -- Function to generate site_code_hash (if you need it)
--- This creates a hash from site_number for lookup/security purposes
-CREATE OR REPLACE FUNCTION generate_site_code_hash(site_code TEXT)
-RETURNS TEXT AS $$
+-- This creates a hash from site_number for lookup/security purposes.
+-- search_path = '' and qualified names satisfy Security Advisor (0011).
+CREATE OR REPLACE FUNCTION public.generate_site_code_hash(site_code TEXT)
+RETURNS TEXT
+LANGUAGE plpgsql
+SET search_path = ''
+AS $$
 BEGIN
-  RETURN encode(digest(site_code, 'sha256'), 'hex');
+  RETURN pg_catalog.encode(extensions.digest(site_code, 'sha256'), 'hex');
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 -- Migration for existing databases (run in SQL editor if daily_reports already exists):
 -- ALTER TABLE daily_reports ADD COLUMN IF NOT EXISTS site_identifier TEXT;

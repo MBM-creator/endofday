@@ -176,7 +176,12 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
     // Send notification email via Resend (non-blocking; report already saved)
     const apiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.RESEND_FROM_EMAIL ?? 'Daily Reports <onboarding@resend.dev>';
-    if (apiKey) {
+    let emailSent = false;
+    let emailError: string | null = null;
+
+    if (!apiKey) {
+      console.warn('[daily-report] RESEND_API_KEY not set; skipping notification email. Set it in Vercel (Production) → Settings → Environment Variables.');
+    } else {
       const resend = new Resend(apiKey);
       const photoListHtml =
         photoLinks.length > 0
@@ -204,21 +209,32 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
         '<p><em>Report ID: ' + report.id + '</em></p>',
       ].join('');
       try {
-        const { error: emailError } = await resend.emails.send({
+        console.log('[daily-report] Sending Resend email to', NOTIFY_EMAIL, 'from', fromEmail);
+        const result = await resend.emails.send({
           from: fromEmail,
           to: [NOTIFY_EMAIL],
           subject: `Daily report: ${siteNumber} – ${crewName}`,
           html,
         });
-        if (emailError) console.error('Resend email error:', emailError);
+        if (result.error) {
+          emailError = typeof result.error === 'object' && result.error !== null && 'message' in result.error ? String((result.error as { message: unknown }).message) : JSON.stringify(result.error);
+          console.error('[daily-report] Resend email error:', result.error);
+        } else {
+          emailSent = true;
+          console.log('[daily-report] Resend email sent successfully, id:', (result as { data?: { id?: string } }).data?.id);
+        }
       } catch (err) {
-        console.error('Failed to send notification email:', err);
+        emailError = err instanceof Error ? err.message : String(err);
+        console.error('[daily-report] Failed to send notification email:', err);
       }
-    } else {
-      console.warn('RESEND_API_KEY not set; skipping notification email');
     }
 
-    return NextResponse.json({ ok: true, reportId: report.id });
+    return NextResponse.json({
+      ok: true,
+      reportId: report.id,
+      emailSent,
+      ...(emailError && { emailError }),
+    });
   } catch (error) {
     console.error('Unexpected error:', error);
     return jsonError('Internal server error', 500);
