@@ -58,6 +58,10 @@ This creates:
 
 If `daily_reports` already exists, run the migration block at the bottom of `supabase/schema.sql` to add `site_identifier` and make `site_id` nullable.
 
+#### Security (RLS and views)
+
+To satisfy the Supabase Security Advisor (RLS disabled, security definer views), run the migration in **Supabase SQL editor**: open `supabase/migrations/20250222120000_fix_security_linter.sql`, copy its contents, and run it once. It enables RLS on `organisations`, `sites`, `daily_reports`, and `daily_report_photos`, and sets the reader/export views to use the invoker’s permissions.
+
 #### Storage Bucket
 
 1. Go to Supabase Dashboard → Storage
@@ -130,6 +134,8 @@ Visit `http://localhost:3000` or go directly to `http://localhost:3000/t/madebym
 3. Add Environment Variables in Vercel:
    - `SUPABASE_URL` - Your Supabase project URL
    - `SUPABASE_SERVICE_ROLE_KEY` - Your Supabase service role key
+   - `RESEND_API_KEY` - Your Resend API key (so notification emails are sent when a report is submitted)
+   - `RESEND_FROM_EMAIL` (optional) - e.g. `Daily Reports <reports@yourdomain.com>`; must use a verified domain in Resend. If omitted, defaults to `onboarding@resend.dev`.
 
 4. Deploy
 
