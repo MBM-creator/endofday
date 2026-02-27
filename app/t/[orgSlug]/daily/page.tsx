@@ -61,7 +61,10 @@ export default function DailyReportPage() {
       setPhotos((prev) => [...prev, ...compressedFiles]);
     } catch (err) {
       console.error('Compression error:', err);
-      setError('Failed to compress images. Please try again.');
+      const msg = err instanceof Error ? err.message : '';
+      const isSafariPatternError =
+        typeof msg === 'string' && (msg.includes('expected pattern') || msg.includes('did not match the expected pattern'));
+      setError(isSafariPatternError ? 'Could not process photos. Please try fewer or different images, or refresh and try again.' : 'Failed to compress images. Please try again.');
     }
   };
 
@@ -167,7 +170,12 @@ export default function DailyReportPage() {
         fileInputRef.current.value = '';
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const msg = err instanceof Error ? err.message : 'An error occurred';
+      // Safari/WebKit can throw "The string did not match the expected pattern" from various APIs
+      const isSafariPatternError =
+        typeof msg === 'string' &&
+        (msg.includes('expected pattern') || msg.includes('did not match the expected pattern'));
+      setError(isSafariPatternError ? 'Server error. Please try again or save your notes and refresh the page.' : msg);
     } finally {
       setIsSubmitting(false);
     }
