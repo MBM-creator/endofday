@@ -133,7 +133,14 @@ export default function DailyReportPage() {
         body: formData,
       });
 
-      const data = await response.json();
+      const raw = await response.text();
+      let data: { ok?: boolean; message?: string; reportId?: string; emailSent?: boolean; emailError?: string };
+      try {
+        data = raw ? JSON.parse(raw) : {};
+      } catch {
+        setError('Server error. Please try again or save your notes and refresh the page.');
+        return;
+      }
 
       if (!response.ok || !data.ok) {
         throw new Error(data.message || 'Failed to submit report');
