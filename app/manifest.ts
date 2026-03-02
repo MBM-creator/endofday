@@ -1,5 +1,7 @@
 import type { MetadataRoute } from "next";
 
+// PWA manifest only; no service worker is registered. If a SW is added later,
+// implement "new version available" refresh (skipWaiting/claim + controllerchange).
 // TODO: Replace placeholder icons with real Made By Mobbs logo.
 // Paths: public/icons/icon-192.png (192×192), public/icons/icon-512.png (512×512).
 

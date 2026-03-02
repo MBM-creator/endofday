@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import imageCompression from 'browser-image-compression';
 
@@ -28,6 +28,22 @@ export default function DailyReportPage() {
   const [lastEmailError, setLastEmailError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const setErrorRef = useRef(setError);
+  setErrorRef.current = setError;
+
+  // Catch Safari "expected pattern" errors that escape our try/catch (e.g. from fetch/stream)
+  useEffect(() => {
+    const onRejection = (event: PromiseRejectionEvent) => {
+      const msg = typeof event.reason?.message === 'string' ? event.reason.message : String(event.reason ?? '');
+      if (msg.includes('pattern') || msg.includes('did not match')) {
+        event.preventDefault();
+        event.stopPropagation();
+        setErrorRef.current('Server error. Please try again or save your notes and refresh the page.');
+      }
+    };
+    window.addEventListener('unhandledrejection', onRejection);
+    return () => window.removeEventListener('unhandledrejection', onRejection);
+  }, []);
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -136,17 +152,32 @@ export default function DailyReportPage() {
         body: formData,
       });
 
-      const raw = await response.text();
+      const responseOk = response.ok;
+      const requestId = response.headers.get('x-request-id') ?? '';
+      const statusCode = response.status;
+
+      const formatErrorWithId = (msg: string) =>
+        requestId ? `${msg} Status: ${statusCode} · Request ID: ${requestId}` : `${msg} Status: ${statusCode}`;
+
+      // Use arrayBuffer + TextDecoder to avoid Safari throwing when reading body.
+      // If status is 200 but body read/parse fails, treat as possible success (don't clear form).
       let data: { ok?: boolean; message?: string; reportId?: string; emailSent?: boolean; emailError?: string };
       try {
+        const buf = await response.arrayBuffer();
+        const raw = new TextDecoder().decode(buf);
         data = raw ? JSON.parse(raw) : {};
       } catch {
-        setError('Server error. Please try again or save your notes and refresh the page.');
+        if (responseOk) {
+          setError(formatErrorWithId('Submission may have been received. If you don\'t see it in your reports, try again.'));
+        } else {
+          setError(formatErrorWithId('Server error. Please try again or save your notes and refresh the page.'));
+        }
         return;
       }
 
-      if (!response.ok || !data.ok) {
-        throw new Error(data.message || 'Failed to submit report');
+      if (!responseOk || !data.ok) {
+        setError(formatErrorWithId(data.message || 'Failed to submit report'));
+        return;
       }
 
       setSuccess(true);
@@ -170,12 +201,9 @@ export default function DailyReportPage() {
         fileInputRef.current.value = '';
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'An error occurred';
-      // Safari/WebKit can throw "The string did not match the expected pattern" from various APIs
-      const isSafariPatternError =
-        typeof msg === 'string' &&
-        (msg.includes('expected pattern') || msg.includes('did not match the expected pattern'));
-      setError(isSafariPatternError ? 'Server error. Please try again or save your notes and refresh the page.' : msg);
+      const msg = (err instanceof Error ? err.message : String(err ?? '')).toLowerCase();
+      const isSafariPatternError = msg.includes('pattern') || msg.includes('did not match');
+      setError(isSafariPatternError ? 'Server error. Please try again or save your notes and refresh the page.' : (err instanceof Error ? err.message : 'An error occurred'));
     } finally {
       setIsSubmitting(false);
     }
