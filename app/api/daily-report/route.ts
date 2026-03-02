@@ -14,6 +14,40 @@ function jsonError(message: string, status = 400, requestId?: string) {
   return res;
 }
 
+function serverError(
+  requestId: string,
+  errorCode?: string,
+  message = 'Internal server error'
+) {
+  const body: { ok: false; requestId: string; errorCode?: string; message: string } = {
+    ok: false,
+    requestId,
+    message,
+  };
+  if (errorCode) body.errorCode = errorCode;
+  const res = NextResponse.json(body, { status: 500 });
+  res.headers.set('x-request-id', requestId);
+  return res;
+}
+
+function normalizeSupabaseError(err: unknown): {
+  code: string | null;
+  message: string;
+  details: string | null;
+  hint: string | null;
+} {
+  if (err === null || err === undefined) {
+    return { code: null, message: '', details: null, hint: null };
+  }
+  const o = err as Record<string, unknown>;
+  return {
+    code: typeof o.code === 'string' ? o.code : null,
+    message: typeof o.message === 'string' ? o.message : String(err),
+    details: typeof o.details === 'string' ? o.details : null,
+    hint: typeof o.hint === 'string' ? o.hint : null,
+  };
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -25,10 +59,37 @@ function escapeHtml(s: string): string {
 
 export async function POST(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') ?? '';
+  const contentType = request.headers.get('content-type') ?? '';
   const requestId = request.headers.get('x-vercel-id') ?? randomUUID().slice(0, 8);
-  try {
-    const formData = await request.formData();
+  const bodyKind = contentType.includes('application/json') ? 'json' : 'multipart';
+  console.log('[daily-report] Request:', {
+    requestId,
+    headers: { 'user-agent': userAgent.slice(0, 120), 'content-type': contentType.slice(0, 80) },
+    bodyKind,
+  });
 
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch (parseError) {
+    console.error('[daily-report] Body parse failed:', { requestId, error: parseError });
+    return serverError(requestId, 'BODY_PARSE', 'Failed to parse request body');
+  }
+
+  // Body keys and file metadata (no body values or file contents)
+  const bodyKeys = [...formData.keys()];
+  const photos = (formData.getAll('photos') as File[]).filter(
+    (f) => f instanceof File && f.size > 0
+  );
+  const fileMetadata = photos.map((f) => ({ type: f.type, size: f.size, name: f.name }));
+  console.log('[daily-report] Request body:', {
+    requestId,
+    bodyKeys,
+    fileCount: photos.length,
+    files: fileMetadata,
+  });
+
+  try {
     // Fields
     const orgSlug = String(formData.get('orgSlug') ?? '').trim();
     const crewName = String(formData.get('crewName') ?? '').trim();
@@ -38,13 +99,6 @@ export async function POST(request: NextRequest) {
     const notFinishedWhy = String(formData.get('notFinishedWhy') ?? '').trim();
     const catchupPlan = String(formData.get('catchupPlan') ?? '').trim();
     const siteLeftCleanRaw = String(formData.get('siteLeftClean') ?? '').trim();
-
-    // Photos
-    const photos = (formData.getAll('photos') as File[]).filter(
-      (f) => f instanceof File && f.size > 0
-    );
-
-    console.log('[daily-report] Request:', { requestId, userAgent: userAgent.slice(0, 80), orgSlug: orgSlug || '(missing)', crewName: crewName ? '(set)' : '(missing)', photoCount: photos.length });
 
     // Validation
     if (!orgSlug) {
@@ -100,10 +154,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (orgError || !org) {
-      console.error('[daily-report] Org lookup failed:', { requestId, orgSlug, orgError, org });
+      const supabaseErr = normalizeSupabaseError(orgError ?? null);
+      console.error('[daily-report] Org lookup failed:', {
+        requestId,
+        orgSlug,
+        supabaseError: supabaseErr,
+      });
       const res = NextResponse.json(
         {
           ok: false,
+          requestId,
           message: process.env.NODE_ENV === 'development' && orgError
             ? `Invalid organisation: ${orgError.message}`
             : 'Invalid organisation',
@@ -133,8 +193,16 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (reportError || !report) {
-      console.error('[daily-report] Error creating report:', { requestId, reportError });
-      return jsonError('Failed to create report', 500, requestId);
+      const supabaseErr = normalizeSupabaseError(reportError ?? null);
+      console.error('[daily-report] Error creating report:', {
+        requestId,
+        supabaseError: supabaseErr,
+      });
+      return serverError(
+        requestId,
+        supabaseErr.code ?? 'REPORT_INSERT',
+        'Failed to create report'
+      );
     }
 
     // Upload photos (require ALL selected photos succeed)
@@ -156,7 +224,11 @@ export async function POST(request: NextRequest) {
         });
 
       if (uploadError) {
-        console.error('[daily-report] Error uploading photo:', { requestId, uploadError });
+        const supabaseErr = normalizeSupabaseError(uploadError);
+        console.error('[daily-report] Error uploading photo:', {
+          requestId,
+          supabaseError: supabaseErr,
+        });
 
         // Cleanup anything uploaded so far + rollback report
         for (const path of uploadedPaths) {
@@ -164,7 +236,11 @@ export async function POST(request: NextRequest) {
         }
         await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
 
-        return jsonError('Failed to upload all photos. Please try again.', 500, requestId);
+        return serverError(
+          requestId,
+          supabaseErr.code ?? 'PHOTO_UPLOAD',
+          'Failed to upload all photos. Please try again.'
+        );
       }
 
       uploadedPaths.push(storagePath);
@@ -181,13 +257,21 @@ export async function POST(request: NextRequest) {
       .insert(photoRecords);
 
     if (photosError) {
-      console.error('[daily-report] Error creating photo records:', { requestId, photosError });
+      const supabaseErr = normalizeSupabaseError(photosError);
+      console.error('[daily-report] Error creating photo records:', {
+        requestId,
+        supabaseError: supabaseErr,
+      });
 
       // Cleanup storage + rollback report to avoid orphaned files
       await supabaseAdmin.storage.from(BUCKET).remove(uploadedPaths);
       await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
 
-      return jsonError('Failed to save photo records. Please try again.', 500, requestId);
+      return serverError(
+        requestId,
+        supabaseErr.code ?? 'PHOTO_RECORDS',
+        'Failed to save photo records. Please try again.'
+      );
     }
 
     const isSafari = /Safari/i.test(userAgent) && !/Chrome/i.test(userAgent);
@@ -266,7 +350,11 @@ export async function POST(request: NextRequest) {
     successRes.headers.set('x-request-id', requestId);
     return successRes;
   } catch (error) {
-    console.error('[daily-report] Unexpected error:', { requestId, error });
-    return jsonError('Internal server error', 500, requestId);
+    const errPayload =
+      error instanceof Error
+        ? { message: error.message, name: error.name, stack: error.stack }
+        : { error: String(error) };
+    console.error('[daily-report] Unexpected error:', { requestId, ...errPayload });
+    return serverError(requestId, 'UNEXPECTED', 'Internal server error');
   }
 }
