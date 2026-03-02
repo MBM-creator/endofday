@@ -16,6 +16,7 @@ export default function DailyReportPage() {
   const [draftId, setDraftId] = useState<string | null>(null);
   const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [crewName, setCrewName] = useState('');
   const [siteNumber, setSiteNumber] = useState('');
   const [summary, setSummary] = useState('');
@@ -91,7 +92,10 @@ export default function DailyReportPage() {
       initialQuality: 0.82,
     };
 
-    for (const file of files) {
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        setUploadProgress({ current: i + 1, total: files.length });
       try {
         const compressed = await imageCompression(file, compressionOptions);
         const preview = URL.createObjectURL(compressed);
@@ -118,10 +122,12 @@ export default function DailyReportPage() {
         setError(isSafariPatternError ? 'Could not process photos. Please try fewer or different images, or refresh and try again.' : 'Failed to upload image. Please try again.');
         break;
       }
+      }
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(null);
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-
-    setIsUploading(false);
-    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const removePhoto = async (index: number) => {
@@ -287,6 +293,15 @@ export default function DailyReportPage() {
           </div>
         )}
 
+        {draftId && (
+          <div className="mb-4 p-3 bg-sky-50 border border-sky-200 rounded-lg text-sky-800 text-sm">
+            Draft started — photos are saved as you add them.
+            {uploadedPhotos.length > 0 && (
+              <> {uploadedPhotos.length} photo{uploadedPhotos.length !== 1 ? 's' : ''} in this report.</>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Crew Name */}
           <div>
@@ -334,6 +349,51 @@ export default function DailyReportPage() {
               className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
               required
             />
+          </div>
+
+          {/* Photos */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Photos <span className="text-red-500">*</span> ({uploadedPhotos.length}/10)
+            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handlePhotoSelect}
+              disabled={isUploading}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent disabled:opacity-50"
+            />
+            <p className="mt-1 text-sm text-gray-500">
+              {isUploading && uploadProgress
+                ? `Uploading photo ${uploadProgress.current} of ${uploadProgress.total}…`
+                : draftId
+                  ? 'Photos are saved to your draft. Add more or remove any before submitting (min 3, max 10).'
+                  : 'Add your first photo to start this report. Photos are uploaded and saved as you add them (min 3, max 10).'}
+            </p>
+
+            {uploadedPhotos.length > 0 && (
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                {uploadedPhotos.map((photo, index) => (
+                  <div key={photo.path} className="relative group">
+                    <img
+                      src={photo.preview}
+                      alt={`Preview ${index + 1}`}
+                      className="w-full h-48 object-cover rounded-lg border border-gray-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removePhoto(index)}
+                      className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                      aria-label="Remove photo"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Finished Plan */}
@@ -432,54 +492,18 @@ export default function DailyReportPage() {
             </div>
           </div>
 
-          {/* Photos */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Photos <span className="text-red-500">*</span> ({uploadedPhotos.length}/10)
-            </label>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              onChange={handlePhotoSelect}
-              disabled={isUploading}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent disabled:opacity-50"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              {isUploading ? 'Uploading...' : 'Minimum 3 photos, maximum 10. Each image is uploaded as you add it.'}
-            </p>
-
-            {uploadedPhotos.length > 0 && (
-              <div className="mt-4 grid grid-cols-2 gap-4">
-                {uploadedPhotos.map((photo, index) => (
-                  <div key={photo.path} className="relative group">
-                    <img
-                      src={photo.preview}
-                      alt={`Preview ${index + 1}`}
-                      className="w-full h-48 object-cover rounded-lg border border-gray-300"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removePhoto(index)}
-                      className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                      aria-label="Remove photo"
-                    >
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* Submit button */}
+          {uploadedPhotos.length > 0 && (
+            <p className="text-sm text-gray-600">
+              Submit report and {uploadedPhotos.length} photo{uploadedPhotos.length !== 1 ? 's' : ''}.
+            </p>
+          )}
           <button
             type="submit"
             disabled={isSubmitting || isUploading}
             className="w-full bg-[#698F00] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {isSubmitting ? 'Submitting...' : isUploading ? 'Uploading...' : 'Submit Report'}
+            {isSubmitting ? 'Submitting...' : isUploading ? (uploadProgress ? `Uploading ${uploadProgress.current}/${uploadProgress.total}…` : 'Uploading...') : 'Submit Report'}
           </button>
         </form>
       </div>
