@@ -4,8 +4,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import imageCompression from 'browser-image-compression';
 
-interface CompressedPhoto {
-  file: File;
+interface UploadedPhoto {
+  path: string;
   preview: string;
 }
 
@@ -13,6 +13,9 @@ export default function DailyReportPage() {
   const params = useParams();
   const orgSlug = params.orgSlug as string;
 
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [uploadedPhotos, setUploadedPhotos] = useState<UploadedPhoto[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const [crewName, setCrewName] = useState('');
   const [siteNumber, setSiteNumber] = useState('');
   const [summary, setSummary] = useState('');
@@ -20,7 +23,6 @@ export default function DailyReportPage() {
   const [notFinishedWhy, setNotFinishedWhy] = useState('');
   const [catchupPlan, setCatchupPlan] = useState('');
   const [siteLeftClean, setSiteLeftClean] = useState<boolean | null>(null);
-  const [photos, setPhotos] = useState<CompressedPhoto[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -45,51 +47,99 @@ export default function DailyReportPage() {
     return () => window.removeEventListener('unhandledrejection', onRejection);
   }, []);
 
+  const ensureDraft = async (): Promise<string | null> => {
+    if (draftId) return draftId;
+    try {
+      const res = await fetch('/api/daily-report/draft', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgSlug }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'Failed to start report');
+        return null;
+      }
+      const id = data.draftId;
+      if (id) setDraftId(id);
+      return id ?? null;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start report');
+      return null;
+    }
+  };
+
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (files.length === 0) return;
 
     setError(null);
-
-    // Check total count
-    const newTotal = photos.length + files.length;
+    const newTotal = uploadedPhotos.length + files.length;
     if (newTotal > 10) {
       setError('Maximum 10 photos allowed');
       return;
     }
 
-    try {
-      const compressionOptions = {
-        maxSizeMB: 2,
-        maxWidthOrHeight: 2200,
-        useWebWorker: true,
-        initialQuality: 0.82,
-      };
+    const currentDraftId = await ensureDraft();
+    if (!currentDraftId) return;
 
-      const compressedFiles = await Promise.all(
-        files.map(async (file) => {
-          const compressed = await imageCompression(file, compressionOptions);
-          const preview = URL.createObjectURL(compressed);
-          return { file: compressed, preview };
-        })
-      );
+    setIsUploading(true);
+    const compressionOptions = {
+      maxSizeMB: 1,
+      maxWidthOrHeight: 1600,
+      useWebWorker: true,
+      initialQuality: 0.82,
+    };
 
-      setPhotos((prev) => [...prev, ...compressedFiles]);
-    } catch (err) {
-      console.error('Compression error:', err);
-      const msg = err instanceof Error ? err.message : '';
-      const isSafariPatternError =
-        typeof msg === 'string' && (msg.includes('expected pattern') || msg.includes('did not match the expected pattern'));
-      setError(isSafariPatternError ? 'Could not process photos. Please try fewer or different images, or refresh and try again.' : 'Failed to compress images. Please try again.');
+    for (const file of files) {
+      try {
+        const compressed = await imageCompression(file, compressionOptions);
+        const preview = URL.createObjectURL(compressed);
+        const formData = new FormData();
+        formData.append('file', compressed);
+
+        const res = await fetch(`/api/daily-report/draft/${currentDraftId}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          URL.revokeObjectURL(preview);
+          setError(data.message || 'Failed to upload photo');
+          break;
+        }
+        setUploadedPhotos((prev) => [...prev, { path: data.path, preview }]);
+      } catch (err) {
+        console.error('Upload error:', err);
+        const msg = err instanceof Error ? err.message : '';
+        const isSafariPatternError =
+          typeof msg === 'string' && (msg.includes('expected pattern') || msg.includes('did not match the expected pattern'));
+        setError(isSafariPatternError ? 'Could not process photos. Please try fewer or different images, or refresh and try again.' : 'Failed to upload image. Please try again.');
+        break;
+      }
     }
+
+    setIsUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const removePhoto = (index: number) => {
-    setPhotos((prev) => {
-      const photoToRemove = prev[index];
-      if (photoToRemove?.preview) URL.revokeObjectURL(photoToRemove.preview);
-      return prev.filter((_, i) => i !== index);
-    });
+  const removePhoto = async (index: number) => {
+    const photo = uploadedPhotos[index];
+    if (!photo) return;
+    if (draftId) {
+      try {
+        await fetch(`/api/daily-report/draft/${draftId}/upload`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: photo.path }),
+        });
+      } catch (err) {
+        console.warn('Failed to remove photo from server:', err);
+      }
+    }
+    URL.revokeObjectURL(photo.preview);
+    setUploadedPhotos((prev) => prev.filter((_, i) => i !== index));
   };
 
   const validateForm = (): string | null => {
@@ -105,8 +155,9 @@ export default function DailyReportPage() {
 
     if (siteLeftClean === null) return 'Please indicate if the site was left clean / tools in site box / materials under cover';
 
-    if (photos.length < 3) return 'At least 3 photos are required';
-    if (photos.length > 10) return 'Maximum 10 photos allowed';
+    if (uploadedPhotos.length < 3) return 'At least 3 photos are required';
+    if (uploadedPhotos.length > 10) return 'Maximum 10 photos allowed';
+    if (!draftId) return 'Please add at least 3 photos before submitting';
 
     return null;
   };
@@ -122,51 +173,51 @@ export default function DailyReportPage() {
       return;
     }
 
+    if (!draftId) {
+      setError('Please add at least 3 photos before submitting');
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      const formData = new FormData();
-      formData.append('orgSlug', orgSlug);
-      formData.append('crewName', crewName.trim());
-      formData.append('siteNumber', siteNumber.trim());
-      formData.append('summary', summary.trim());
-      formData.append('finishedPlan', finishedPlan!.toString());
-
-      if (finishedPlan === false) {
-        formData.append('notFinishedWhy', notFinishedWhy.trim());
-        formData.append('catchupPlan', catchupPlan.trim());
-      } else {
-        // Ensure server doesn't accidentally see stale text from previous attempt
-        formData.append('notFinishedWhy', '');
-        formData.append('catchupPlan', '');
-      }
-
-      formData.append('siteLeftClean', siteLeftClean!.toString());
-
-      photos.forEach((photo) => {
-        formData.append('photos', photo.file);
-      });
-
-      const response = await fetch('/api/daily-report', {
+      const response = await fetch('/api/daily-report/submit', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          draftId,
+          orgSlug,
+          crewName: crewName.trim(),
+          siteNumber: siteNumber.trim(),
+          summary: summary.trim(),
+          finishedPlan: finishedPlan!.toString(),
+          notFinishedWhy: finishedPlan === false ? notFinishedWhy.trim() : '',
+          catchupPlan: finishedPlan === false ? catchupPlan.trim() : '',
+          siteLeftClean: siteLeftClean!.toString(),
+        }),
       });
 
       const responseOk = response.ok;
-      const requestId = response.headers.get('x-request-id') ?? '';
+      const requestIdFromHeader = response.headers.get('x-request-id') ?? '';
       const statusCode = response.status;
 
-      const formatErrorWithId = (msg: string) =>
-        requestId ? `${msg} Status: ${statusCode} · Request ID: ${requestId}` : `${msg} Status: ${statusCode}`;
-
-      // Use arrayBuffer + TextDecoder to avoid Safari throwing when reading body.
-      // If status is 200 but body read/parse fails, treat as possible success (don't clear form).
-      let data: { ok?: boolean; message?: string; reportId?: string; emailSent?: boolean; emailError?: string };
+      let data: {
+        ok?: boolean;
+        message?: string;
+        requestId?: string;
+        errorCode?: string;
+        reportId?: string;
+        emailSent?: boolean;
+        emailError?: string;
+      };
       try {
         const buf = await response.arrayBuffer();
         const raw = new TextDecoder().decode(buf);
         data = raw ? JSON.parse(raw) : {};
       } catch {
+        const rid = requestIdFromHeader;
+        const formatErrorWithId = (msg: string) =>
+          rid ? `${msg} Status: ${statusCode} · Request ID: ${rid}` : `${msg} Status: ${statusCode}`;
         if (responseOk) {
           setError(formatErrorWithId('Submission may have been received. If you don\'t see it in your reports, try again.'));
         } else {
@@ -175,8 +226,14 @@ export default function DailyReportPage() {
         return;
       }
 
+      const requestId = data.requestId ?? requestIdFromHeader;
+      const formatErrorWithId = (msg: string) =>
+        requestId ? `${msg} Status: ${statusCode} · Request ID: ${requestId}` : `${msg} Status: ${statusCode}`;
+
       if (!responseOk || !data.ok) {
-        setError(formatErrorWithId(data.message || 'Failed to submit report'));
+        let msg = data.message || 'Failed to submit report';
+        if (data.errorCode) msg += ` (Code: ${data.errorCode})`;
+        setError(formatErrorWithId(msg));
         return;
       }
 
@@ -184,7 +241,6 @@ export default function DailyReportPage() {
       setLastEmailSent(data.emailSent === true);
       setLastEmailError(data.emailError ?? null);
 
-      // Reset form
       setCrewName('');
       setSiteNumber('');
       setSummary('');
@@ -192,10 +248,9 @@ export default function DailyReportPage() {
       setNotFinishedWhy('');
       setCatchupPlan('');
       setSiteLeftClean(null);
-
-      // Revoke previews + clear photos
-      photos.forEach((p) => URL.revokeObjectURL(p.preview));
-      setPhotos([]);
+      setDraftId(null);
+      uploadedPhotos.forEach((p) => URL.revokeObjectURL(p.preview));
+      setUploadedPhotos([]);
 
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
@@ -380,7 +435,7 @@ export default function DailyReportPage() {
           {/* Photos */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Photos <span className="text-red-500">*</span> ({photos.length}/10)
+              Photos <span className="text-red-500">*</span> ({uploadedPhotos.length}/10)
             </label>
             <input
               ref={fileInputRef}
@@ -388,15 +443,17 @@ export default function DailyReportPage() {
               accept="image/*"
               multiple
               onChange={handlePhotoSelect}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent"
+              disabled={isUploading}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent disabled:opacity-50"
             />
-            <p className="mt-1 text-sm text-gray-500">Minimum 3 photos, maximum 10 photos required</p>
+            <p className="mt-1 text-sm text-gray-500">
+              {isUploading ? 'Uploading...' : 'Minimum 3 photos, maximum 10. Each image is uploaded as you add it.'}
+            </p>
 
-            {/* Photo previews */}
-            {photos.length > 0 && (
+            {uploadedPhotos.length > 0 && (
               <div className="mt-4 grid grid-cols-2 gap-4">
-                {photos.map((photo, index) => (
-                  <div key={index} className="relative group">
+                {uploadedPhotos.map((photo, index) => (
+                  <div key={photo.path} className="relative group">
                     <img
                       src={photo.preview}
                       alt={`Preview ${index + 1}`}
@@ -419,10 +476,10 @@ export default function DailyReportPage() {
           {/* Submit button */}
           <button
             type="submit"
-            disabled={isSubmitting}
+            disabled={isSubmitting || isUploading}
             className="w-full bg-[#698F00] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
           >
-            {isSubmitting ? 'Submitting...' : 'Submit Report'}
+            {isSubmitting ? 'Submitting...' : isUploading ? 'Uploading...' : 'Submit Report'}
           </button>
         </form>
       </div>
