@@ -8,8 +8,10 @@ export const runtime = 'nodejs';
 const BUCKET = 'daily-reports';
 const NOTIFY_EMAIL = 'steve@madebymobbs.com.au';
 
-function jsonError(message: string, status = 400) {
-  return NextResponse.json({ ok: false, message }, { status });
+function jsonError(message: string, status = 400, requestId?: string) {
+  const res = NextResponse.json({ ok: false, message }, { status });
+  if (requestId) res.headers.set('x-request-id', requestId);
+  return res;
 }
 
 function escapeHtml(s: string): string {
@@ -22,11 +24,10 @@ function escapeHtml(s: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const userAgent = request.headers.get('user-agent') ?? '';
+  const requestId = request.headers.get('x-vercel-id') ?? randomUUID().slice(0, 8);
   try {
     const formData = await request.formData();
-
-console.log('API using SUPABASE_URL =', process.env.SUPABASE_URL);
-console.log('orgSlug received =', String(formData.get('orgSlug')));
 
     // Fields
     const orgSlug = String(formData.get('orgSlug') ?? '').trim();
@@ -43,30 +44,52 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
       (f) => f instanceof File && f.size > 0
     );
 
+    console.log('[daily-report] Request:', { requestId, userAgent: userAgent.slice(0, 80), orgSlug: orgSlug || '(missing)', crewName: crewName ? '(set)' : '(missing)', photoCount: photos.length });
+
     // Validation
-    if (!orgSlug) return jsonError('Organisation is required');
-    if (!crewName) return jsonError('Crew name is required');
-    if (!siteNumber) return jsonError('Site Number / Name is required');
-    if (!summary) return jsonError("Today's summary is required");
+    if (!orgSlug) {
+      console.warn('[daily-report] Validation failed:', { requestId, reason: 'Organisation is required' });
+      return jsonError('Organisation is required', 400, requestId);
+    }
+    if (!crewName) {
+      console.warn('[daily-report] Validation failed:', { requestId, reason: 'Crew name is required' });
+      return jsonError('Crew name is required', 400, requestId);
+    }
+    if (!siteNumber) {
+      console.warn('[daily-report] Validation failed:', { requestId, reason: 'Site Number / Name is required' });
+      return jsonError('Site Number / Name is required', 400, requestId);
+    }
+    if (!summary) {
+      console.warn('[daily-report] Validation failed:', { requestId, reason: "Today's summary is required" });
+      return jsonError("Today's summary is required", 400, requestId);
+    }
 
     if (finishedPlanRaw !== 'true' && finishedPlanRaw !== 'false') {
-      return jsonError('Please indicate if you finished everything planned today');
+      console.warn('[daily-report] Validation failed:', { requestId, reason: 'finishedPlan invalid' });
+      return jsonError('Please indicate if you finished everything planned today', 400, requestId);
     }
     const finishedPlanBool = finishedPlanRaw === 'true';
 
     if (!finishedPlanBool) {
-      if (!notFinishedWhy) return jsonError('Please explain what was not finished and why');
-      if (!catchupPlan) return jsonError('Please provide a plan to make up the lost time');
+      if (!notFinishedWhy) {
+        console.warn('[daily-report] Validation failed:', { requestId, reason: 'notFinishedWhy required' });
+        return jsonError('Please explain what was not finished and why', 400, requestId);
+      }
+      if (!catchupPlan) {
+        console.warn('[daily-report] Validation failed:', { requestId, reason: 'catchupPlan required' });
+        return jsonError('Please provide a plan to make up the lost time', 400, requestId);
+      }
     }
 
     if (siteLeftCleanRaw !== 'true' && siteLeftCleanRaw !== 'false') {
-      return jsonError('Please indicate if the site was left clean / tools in site box / materials under cover');
+      console.warn('[daily-report] Validation failed:', { requestId, reason: 'siteLeftClean invalid' });
+      return jsonError('Please indicate if the site was left clean / tools in site box / materials under cover', 400, requestId);
     }
     const siteLeftCleanBool = siteLeftCleanRaw === 'true';
 
-
     if (photos.length < 3 || photos.length > 10) {
-      return jsonError('Must upload between 3 and 10 photos');
+      console.warn('[daily-report] Validation failed:', { requestId, photoCount: photos.length });
+      return jsonError('Must upload between 3 and 10 photos', 400, requestId);
     }
 
     // Validate organisation exists
@@ -77,8 +100,8 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
       .single();
 
     if (orgError || !org) {
-      console.error('Org lookup failed:', { orgSlug, orgError, org });
-      return NextResponse.json(
+      console.error('[daily-report] Org lookup failed:', { requestId, orgSlug, orgError, org });
+      const res = NextResponse.json(
         {
           ok: false,
           message: process.env.NODE_ENV === 'development' && orgError
@@ -87,6 +110,8 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
         },
         { status: 404 }
       );
+      res.headers.set('x-request-id', requestId);
+      return res;
     }
 
     // Site Number/Name is free text (no lookup); later can link to Client Connect / sites
@@ -108,8 +133,8 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
       .single();
 
     if (reportError || !report) {
-      console.error('Error creating report:', reportError);
-      return jsonError('Failed to create report', 500);
+      console.error('[daily-report] Error creating report:', { requestId, reportError });
+      return jsonError('Failed to create report', 500, requestId);
     }
 
     // Upload photos (require ALL selected photos succeed)
@@ -131,7 +156,7 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
         });
 
       if (uploadError) {
-        console.error('Error uploading photo:', uploadError);
+        console.error('[daily-report] Error uploading photo:', { requestId, uploadError });
 
         // Cleanup anything uploaded so far + rollback report
         for (const path of uploadedPaths) {
@@ -139,7 +164,7 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
         }
         await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
 
-        return jsonError('Failed to upload all photos. Please try again.', 500);
+        return jsonError('Failed to upload all photos. Please try again.', 500, requestId);
       }
 
       uploadedPaths.push(storagePath);
@@ -156,14 +181,17 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
       .insert(photoRecords);
 
     if (photosError) {
-      console.error('Error creating photo records:', photosError);
+      console.error('[daily-report] Error creating photo records:', { requestId, photosError });
 
       // Cleanup storage + rollback report to avoid orphaned files
       await supabaseAdmin.storage.from(BUCKET).remove(uploadedPaths);
       await supabaseAdmin.from('daily_reports').delete().eq('id', report.id);
 
-      return jsonError('Failed to save photo records. Please try again.', 500);
+      return jsonError('Failed to save photo records. Please try again.', 500, requestId);
     }
+
+    const isSafari = /Safari/i.test(userAgent) && !/Chrome/i.test(userAgent);
+    console.log('[daily-report] Success:', { requestId, reportId: report.id, isSafari, photoCount: photos.length });
 
     // Build photo links (signed URLs, valid 7 days, so they work for private buckets)
     const signedUrlExpiry = 60 * 60 * 24 * 7; // 7 days
@@ -209,7 +237,7 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
         '<p><em>Report ID: ' + report.id + '</em></p>',
       ].join('');
       try {
-        console.log('[daily-report] Sending Resend email to', NOTIFY_EMAIL, 'from', fromEmail);
+        console.log('[daily-report] Sending Resend email:', { requestId, to: NOTIFY_EMAIL, from: fromEmail });
         const result = await resend.emails.send({
           from: fromEmail,
           to: [NOTIFY_EMAIL],
@@ -218,25 +246,27 @@ console.log('orgSlug received =', String(formData.get('orgSlug')));
         });
         if (result.error) {
           emailError = typeof result.error === 'object' && result.error !== null && 'message' in result.error ? String((result.error as { message: unknown }).message) : JSON.stringify(result.error);
-          console.error('[daily-report] Resend email error:', result.error);
+          console.error('[daily-report] Resend email error:', { requestId, error: result.error });
         } else {
           emailSent = true;
-          console.log('[daily-report] Resend email sent successfully, id:', (result as { data?: { id?: string } }).data?.id);
+          console.log('[daily-report] Resend email sent successfully:', { requestId, id: (result as { data?: { id?: string } }).data?.id });
         }
       } catch (err) {
         emailError = err instanceof Error ? err.message : String(err);
-        console.error('[daily-report] Failed to send notification email:', err);
+        console.error('[daily-report] Failed to send notification email:', { requestId, err });
       }
     }
 
-    return NextResponse.json({
+    const successRes = NextResponse.json({
       ok: true,
       reportId: report.id,
       emailSent,
       ...(emailError && { emailError }),
     });
+    successRes.headers.set('x-request-id', requestId);
+    return successRes;
   } catch (error) {
-    console.error('Unexpected error:', error);
-    return jsonError('Internal server error', 500);
+    console.error('[daily-report] Unexpected error:', { requestId, error });
+    return jsonError('Internal server error', 500, requestId);
   }
 }

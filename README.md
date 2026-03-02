@@ -4,7 +4,7 @@ A mobile-first daily site report webapp for crews to submit reports on-site usin
 
 ## Features
 
-- Mobile-first PWA-like form interface
+- Mobile-first PWA-like form interface (manifest + icons only; no service worker)
 - Multi-tenant support via organisation slugs
 - Site number-based identification (no login required)
 - Compulsory photo uploads (3-10 photos)
@@ -218,6 +218,7 @@ See `supabase/schema.sql` for the complete schema.
 ## Notes
 
 - **PWA / home screen icon:** Placeholder icons are in `public/icons/icon-192.png` (192×192) and `public/icons/icon-512.png` (512×512). To use the real Made By Mobbs logo, replace these files with PNGs of the same sizes.
+- **Service worker:** The app does not register a service worker (manifest + icons only). If you add one later, implement "new version available" behaviour: in the SW use `skipWaiting()` and `clients.claim()` in `activate`; in the client listen for `controllerchange` and show a "New version available – Refresh" banner or auto-reload.
 - No authentication required (public form)
 - Site number is the only identifier/gate
 - Photos are compressed client-side before upload (maxWidthOrHeight: 2200, quality: 0.82)
