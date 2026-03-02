@@ -57,6 +57,11 @@ function escapeHtml(s: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// Legacy single-POST endpoint (form + all photos). Prefer draft + per-image upload + submit flow.
+// If client sends a very large body, Vercel may return 413 before we run; 413 here usually means
+// "old client sent all photos in one request — user should refresh to get draft-first flow".
+const PAYLOAD_TOO_LARGE_THRESHOLD = 4_000_000; // bytes; Vercel body limit ~4.5 MB
+
 export async function POST(request: NextRequest) {
   const userAgent = request.headers.get('user-agent') ?? '';
   const contentType = request.headers.get('content-type') ?? '';
@@ -67,6 +72,26 @@ export async function POST(request: NextRequest) {
     headers: { 'user-agent': userAgent.slice(0, 120), 'content-type': contentType.slice(0, 80) },
     bodyKind,
   });
+
+  // If Content-Length is over threshold, return a clear "refresh" message instead of risking 413 or parse failure.
+  const contentLength = request.headers.get('content-length');
+  if (contentLength) {
+    const size = parseInt(contentLength, 10);
+    if (!Number.isNaN(size) && size > PAYLOAD_TOO_LARGE_THRESHOLD) {
+      console.warn('[daily-report] Request body too large:', { requestId, contentLength: size });
+      const res = NextResponse.json(
+        {
+          ok: false,
+          requestId,
+          message: 'Request too large. Please refresh the page to get the latest version and try again.',
+          errorCode: 'REFRESH_REQUIRED',
+        },
+        { status: 400 }
+      );
+      res.headers.set('x-request-id', requestId);
+      return res;
+    }
+  }
 
   let formData: FormData;
   try {
@@ -88,6 +113,22 @@ export async function POST(request: NextRequest) {
     fileCount: photos.length,
     files: fileMetadata,
   });
+
+  // Deprecate legacy flow: multipart with photos should use draft + submit. Return clear "refresh" so old cached clients get a helpful message.
+  if (bodyKind === 'multipart' && photos.length > 0) {
+    console.warn('[daily-report] Legacy multipart with photos rejected:', { requestId, fileCount: photos.length });
+    const res = NextResponse.json(
+      {
+        ok: false,
+        requestId,
+        message: 'Please refresh the page to use the latest report form.',
+        errorCode: 'USE_DRAFT_FLOW',
+      },
+      { status: 400 }
+    );
+    res.headers.set('x-request-id', requestId);
+    return res;
+  }
 
   try {
     // Fields
