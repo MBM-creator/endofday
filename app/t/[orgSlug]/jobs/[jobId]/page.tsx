@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 
 interface Job {
@@ -19,6 +19,22 @@ interface Stage {
   created_at: string;
 }
 
+interface PreCommencementPhoto {
+  id: string;
+  storage_path: string;
+  created_at: string;
+  url: string;
+}
+
+interface JobBrief {
+  id: string;
+  job_id: string;
+  content: string | null;
+  updated_at: string;
+}
+
+const MAX_PHOTOS = 10;
+
 export default function JobDetailPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
@@ -26,8 +42,20 @@ export default function JobDetailPage() {
 
   const [job, setJob] = useState<Job | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
+  const [photos, setPhotos] = useState<PreCommencementPhoto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [photosLoading, setPhotosLoading] = useState(false);
+  const [photosError, setPhotosError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [photoIdRemoving, setPhotoIdRemoving] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [brief, setBrief] = useState<JobBrief | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefError, setBriefError] = useState<string | null>(null);
+  const [isEditingBrief, setIsEditingBrief] = useState(false);
+  const [editContent, setEditContent] = useState('');
+  const [isSavingBrief, setIsSavingBrief] = useState(false);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -92,6 +120,175 @@ export default function JobDetailPage() {
     };
   }, [orgSlug, jobId]);
 
+  // Fetch pre-commencement photos when job is available
+  useEffect(() => {
+    if (!job || !orgSlug || !jobId) return;
+    let cancelled = false;
+    setPhotosLoading(true);
+    setPhotosError(null);
+    fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json())
+      .then((data: { ok?: boolean; photos?: PreCommencementPhoto[]; message?: string }) => {
+        if (cancelled) return;
+        if (!data?.ok || !Array.isArray(data.photos)) {
+          setPhotosError(typeof data?.message === 'string' ? data.message : 'Failed to load photos');
+          return;
+        }
+        setPhotos(data.photos);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setPhotosError(err instanceof Error ? err.message : 'Failed to load photos');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setPhotosLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job, jobId, orgSlug]);
+
+  // Fetch job brief when job is available
+  useEffect(() => {
+    if (!job || !orgSlug || !jobId) return;
+    let cancelled = false;
+    setBriefLoading(true);
+    setBriefError(null);
+    fetch(`/api/jobs/${jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json())
+      .then((data: { ok?: boolean; brief?: JobBrief | null; message?: string }) => {
+        if (cancelled) return;
+        if (!data?.ok) {
+          setBriefError(typeof data?.message === 'string' ? data.message : 'Failed to load job brief');
+          return;
+        }
+        setBrief(data.brief ?? null);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setBriefError(err instanceof Error ? err.message : 'Failed to load job brief');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setBriefLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job, jobId, orgSlug]);
+
+  async function refetchPhotos() {
+    if (!orgSlug || !jobId) return;
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`);
+      const data = await res.json();
+      if (res.ok && data?.ok && Array.isArray(data.photos)) {
+        setPhotos(data.photos);
+        setPhotosError(null);
+      }
+    } catch {
+      // Keep existing photos on refetch failure
+    }
+  }
+
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
+    if (photos.length >= MAX_PHOTOS) {
+      setPhotosError(`Maximum ${MAX_PHOTOS} photos allowed`);
+      return;
+    }
+    const toUpload = files.slice(0, MAX_PHOTOS - photos.length);
+    if (toUpload.length === 0) {
+      setPhotosError(`Maximum ${MAX_PHOTOS} photos allowed`);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+      return;
+    }
+    setPhotosError(null);
+    setIsUploading(true);
+    (async () => {
+      let lastError: string | null = null;
+      for (const file of toUpload) {
+        if (!(file instanceof File) || file.size === 0) continue;
+        const formData = new FormData();
+        formData.append('file', file);
+        try {
+          const res = await fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`, {
+            method: 'POST',
+            body: formData,
+          });
+          const data = await res.json();
+          if (res.ok && data?.ok) {
+            await refetchPhotos();
+          } else {
+            lastError = typeof data?.message === 'string' ? data.message : 'Upload failed';
+          }
+        } catch {
+          lastError = 'Upload failed';
+        }
+      }
+      if (lastError) setPhotosError(lastError);
+      setIsUploading(false);
+      if (photoInputRef.current) photoInputRef.current.value = '';
+    })();
+  }
+
+  async function handleRemovePhoto(photo: PreCommencementPhoto) {
+    if (!window.confirm('Remove this photo?')) return;
+    setPhotosError(null);
+    setPhotoIdRemoving(photo.id);
+    try {
+      const res = await fetch(
+        `/api/jobs/${jobId}/photos?photoId=${encodeURIComponent(photo.id)}&orgSlug=${encodeURIComponent(orgSlug)}`,
+        { method: 'DELETE' }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        await refetchPhotos();
+      } else {
+        setPhotosError(typeof data?.message === 'string' ? data.message : 'Failed to remove photo');
+      }
+    } catch {
+      setPhotosError('Failed to remove photo');
+    } finally {
+      setPhotoIdRemoving(null);
+    }
+  }
+
+  function startEditingBrief() {
+    setEditContent(brief?.content ?? '');
+    setBriefError(null);
+    setIsEditingBrief(true);
+  }
+
+  function cancelEditingBrief() {
+    setIsEditingBrief(false);
+  }
+
+  async function saveBrief() {
+    setBriefError(null);
+    setIsSavingBrief(true);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: editContent }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.ok && data.brief) {
+        setBrief(data.brief);
+        setIsEditingBrief(false);
+      } else {
+        setBriefError(typeof data?.message === 'string' ? data.message : 'Failed to save job brief');
+      }
+    } catch {
+      setBriefError('Failed to save job brief');
+    } finally {
+      setIsSavingBrief(false);
+    }
+  }
+
   function formatDate(iso: string): string {
     try {
       const d = new Date(iso);
@@ -123,7 +320,72 @@ export default function JobDetailPage() {
               )}
             </div>
 
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Stages</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-3">Job brief</h2>
+            {briefLoading && (
+              <p className="text-gray-600">Loading job brief…</p>
+            )}
+            {!briefLoading && !isEditingBrief && briefError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                {briefError}
+              </div>
+            )}
+            {!briefLoading && !isEditingBrief && (
+              <>
+                <div className="mb-3 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                  {brief && brief.content !== null && brief.content !== '' ? (
+                    <pre className="whitespace-pre-wrap font-sans text-gray-900 text-sm break-words">
+                      {brief.content}
+                    </pre>
+                  ) : (
+                    <p className="text-gray-500 text-sm">No job brief yet.</p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={startEditingBrief}
+                  className="text-sm text-[#698F00] hover:underline font-medium"
+                >
+                  Edit
+                </button>
+              </>
+            )}
+            {!briefLoading && isEditingBrief && (
+              <>
+                {briefError && (
+                  <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                    {briefError}
+                  </div>
+                )}
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  rows={8}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900"
+                  placeholder="Enter job brief (plain text)..."
+                  disabled={isSavingBrief}
+                />
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveBrief}
+                    disabled={isSavingBrief}
+                    className="bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {isSavingBrief ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEditingBrief}
+                    disabled={isSavingBrief}
+                    className="bg-white text-gray-700 py-2 px-4 rounded-lg border border-gray-300 font-medium hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 mt-8">Stages</h2>
             {stages.length === 0 ? (
               <p className="text-gray-600">No stages yet.</p>
             ) : (
@@ -142,6 +404,63 @@ export default function JobDetailPage() {
                   </li>
                 ))}
               </ul>
+            )}
+
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 mt-8">
+              Pre-commencement photos ({photos.length}/{MAX_PHOTOS})
+            </h2>
+            {photosLoading && (
+              <p className="text-gray-600">Loading photos…</p>
+            )}
+            {!photosLoading && photosError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                {photosError}
+              </div>
+            )}
+            {!photosLoading && photos.length > 0 && (
+              <div className="mb-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {photos.map((photo) => (
+                  <div key={photo.id} className="relative group">
+                    <img
+                      src={photo.url}
+                      alt="Pre-commencement photo"
+                      className="w-full aspect-square object-cover rounded-lg border border-gray-200 bg-gray-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(photo)}
+                      disabled={photoIdRemoving === photo.id}
+                      className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity disabled:opacity-100"
+                      aria-label="Remove photo"
+                    >
+                      {photoIdRemoving === photo.id ? (
+                        <span className="text-xs">…</span>
+                      ) : (
+                        '×'
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!photosLoading && photos.length < MAX_PHOTOS && (
+              <>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoSelect}
+                  disabled={isUploading}
+                  className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-gray-300 file:bg-white file:text-gray-700 hover:file:bg-gray-50 focus:ring-2 focus:ring-[#698F00] focus:border-transparent disabled:opacity-50"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  {isUploading ? 'Uploading…' : 'Add photos (max 10).'}
+                </p>
+              </>
+            )}
+            {!photosLoading && photos.length >= MAX_PHOTOS && (
+              <p className="text-gray-500 text-sm">Maximum photos reached.</p>
             )}
           </>
         )}
