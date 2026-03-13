@@ -136,7 +136,23 @@ export async function GET(
     return serverError(requestId, supabaseErr.code ?? 'PHOTOS_LIST', 'Failed to list photos');
   }
 
-  const res = NextResponse.json({ ok: true, photos: photos ?? [] });
+  const list = photos ?? [];
+  const signedUrlExpiry = 3600; // 1 hour, for display only
+  const photosWithUrl: { id: string; storage_path: string; created_at: string; url: string }[] = [];
+
+  for (const row of list) {
+    const { data: signed, error: signError } = await supabaseAdmin.storage
+      .from(BUCKET)
+      .createSignedUrl(row.storage_path, signedUrlExpiry);
+    if (signError || !signed?.signedUrl) {
+      const supabaseErr = normalizeSupabaseError(signError ?? null);
+      console.error('[api/jobs/[jobId]/photos] Signed URL failed:', { requestId, storage_path: row.storage_path, supabaseError: supabaseErr });
+      return serverError(requestId, supabaseErr.code ?? 'PHOTO_SIGN', 'Failed to generate photo URL');
+    }
+    photosWithUrl.push({ ...row, url: signed.signedUrl });
+  }
+
+  const res = NextResponse.json({ ok: true, photos: photosWithUrl });
   res.headers.set('x-request-id', requestId);
   return res;
 }
@@ -226,6 +242,63 @@ export async function POST(
   }
 
   const res = NextResponse.json({ ok: true, photo }, { status: 201 });
+  res.headers.set('x-request-id', requestId);
+  return res;
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ jobId: string }> }
+) {
+  const requestId = request.headers.get('x-vercel-id') ?? randomUUID().slice(0, 8);
+  const { jobId } = await params;
+  const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
+  const photoId = request.nextUrl.searchParams.get('photoId')?.trim() ?? '';
+
+  if (!photoId || !isValidUuid(photoId)) {
+    return jsonError('photoId is required and must be a valid UUID', 400, requestId);
+  }
+
+  const validation = await validateJobForOrg(jobId, orgSlug, requestId);
+  if (validation instanceof NextResponse) return validation;
+
+  const { data: photo, error: photoError } = await supabaseAdmin
+    .from('job_pre_commencement_photos')
+    .select('id, storage_path')
+    .eq('id', photoId)
+    .eq('job_id', jobId)
+    .single();
+
+  if (photoError || !photo) {
+    const supabaseErr = normalizeSupabaseError(photoError ?? null);
+    console.error('[api/jobs/[jobId]/photos] DELETE photo not found:', { requestId, photoId, jobId, supabaseError: supabaseErr });
+    const res = NextResponse.json(
+      { ok: false, requestId, message: 'Photo not found' },
+      { status: 404 }
+    );
+    res.headers.set('x-request-id', requestId);
+    return res;
+  }
+
+  const { error: removeError } = await supabaseAdmin.storage.from(BUCKET).remove([photo.storage_path]);
+  if (removeError) {
+    const supabaseErr = normalizeSupabaseError(removeError);
+    console.error('[api/jobs/[jobId]/photos] DELETE storage failed:', { requestId, storage_path: photo.storage_path, supabaseError: supabaseErr });
+    return serverError(requestId, supabaseErr.code ?? 'PHOTO_REMOVE', 'Failed to remove photo');
+  }
+
+  const { error: deleteError } = await supabaseAdmin
+    .from('job_pre_commencement_photos')
+    .delete()
+    .eq('id', photoId);
+
+  if (deleteError) {
+    const supabaseErr = normalizeSupabaseError(deleteError);
+    console.error('[api/jobs/[jobId]/photos] DELETE row failed:', { requestId, photoId, supabaseError: supabaseErr });
+    return serverError(requestId, supabaseErr.code ?? 'PHOTO_DELETE', 'Failed to delete photo record');
+  }
+
+  const res = NextResponse.json({ ok: true });
   res.headers.set('x-request-id', requestId);
   return res;
 }
