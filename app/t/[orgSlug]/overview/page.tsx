@@ -15,6 +15,7 @@ interface JobOverviewEntry {
   blockerType?: string | null;
   labourHoursToday?: number | null;
   quotedLabourHours?: number | null;
+  actualLabourHoursTotal?: number | null;
 }
 
 export default function OverviewPage() {
@@ -106,6 +107,25 @@ export default function OverviewPage() {
                     Labour today: {job.labourHoursToday}h
                   </p>
                 )}
+                {job.activeStageName != null && (() => {
+                  const actual = job.actualLabourHoursTotal ?? 0;
+                  const quoted = job.quotedLabourHours;
+                  const hasQuoted = typeof quoted === 'number' && quoted > 0;
+                  const ratio = hasQuoted ? actual / quoted : 0;
+                  const colorClass = hasQuoted
+                    ? ratio > 1
+                      ? 'text-red-800'
+                      : ratio >= 0.8
+                        ? 'text-amber-800'
+                        : 'text-gray-600'
+                    : 'text-gray-600';
+                  const text = hasQuoted ? `Labour: ${actual} / ${quoted}h` : `Labour: ${actual}h`;
+                  return (
+                    <p className={`mt-2 text-sm ${colorClass}`}>
+                      {text}
+                    </p>
+                  );
+                })()}
                 {job.activeStageName != null && job.blockerType && (
                   <div className="mt-2 py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
                     &#9888; Blocked: {job.blockerType}
