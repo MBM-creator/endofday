@@ -27,6 +27,8 @@ interface Stage {
   sort_order: number;
   created_at: string;
   checklist_template_id?: string | null;
+  daily_note?: string | null;
+  daily_note_updated_at?: string | null;
   checklist_templates?: { name: string; checklist_template_items?: ChecklistTemplateItem[] } | null;
 }
 
@@ -64,6 +66,10 @@ export default function TodaysWorkPage() {
   const [completionsError, setCompletionsError] = useState<string | null>(null);
   const [togglingItemId, setTogglingItemId] = useState<string | null>(null);
 
+  const [dailyNote, setDailyNote] = useState('');
+  const [dailyNoteSaving, setDailyNoteSaving] = useState(false);
+  const [dailyNoteError, setDailyNoteError] = useState<string | null>(null);
+
   // Single consolidated load for Today's Work data
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -83,6 +89,8 @@ export default function TodaysWorkPage() {
     setBriefError(null);
     setPhotosError(null);
     setCompletionsError(null);
+    setDailyNote('');
+    setDailyNoteError(null);
 
     fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -116,6 +124,7 @@ export default function TodaysWorkPage() {
         setCompletions(typeof data.completions === 'object' && data.completions != null ? data.completions : {});
         setBriefError(data.briefError ?? null);
         setPhotosError(data.photosError ?? null);
+        setDailyNote(data.activeStage?.daily_note ?? '');
       })
       .catch((err) => {
         if (!cancelled) {
@@ -177,6 +186,32 @@ export default function TodaysWorkPage() {
     }
   }
 
+  async function saveDailyNote() {
+    if (!activeStage?.id || !orgSlug || dailyNoteSaving) return;
+    setDailyNoteSaving(true);
+    setDailyNoteError(null);
+    try {
+      const res = await fetch(
+        `/api/stages/${activeStage.id}/daily-note?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: dailyNote }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        setDailyNote(data.dailyNote ?? '');
+      } else {
+        setDailyNoteError(typeof data?.message === 'string' ? data.message : 'Could not save note');
+      }
+    } catch {
+      setDailyNoteError('Could not save note');
+    } finally {
+      setDailyNoteSaving(false);
+    }
+  }
+
   const hasActiveStage = !!activeStage;
 
   return (
@@ -235,6 +270,34 @@ export default function TodaysWorkPage() {
                   )}
                 </div>
               )}
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Daily notes</h2>
+              {dailyNoteError && (
+                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {dailyNoteError}
+                </div>
+              )}
+              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <textarea
+                  value={dailyNote}
+                  onChange={(e) => setDailyNote(e.target.value)}
+                  rows={4}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm resize-y min-h-[80px]"
+                  placeholder="Notes for today's stage…"
+                  disabled={dailyNoteSaving}
+                  aria-label="Daily notes"
+                />
+                <button
+                  type="button"
+                  onClick={saveDailyNote}
+                  disabled={dailyNoteSaving}
+                  className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {dailyNoteSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
             </section>
 
             <section>
