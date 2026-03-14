@@ -97,6 +97,17 @@ export default function OverviewPage() {
                   <span>{job.hasDailyNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
                   <span>{job.eodSubmittedToday ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
                 </div>
+                {job.activeStageName != null && (() => {
+                  const w: string[] = [];
+                  if (job.checklistTotal > 0 && job.checklistCompleted < job.checklistTotal) w.push('Checklist incomplete');
+                  if (!job.hasDailyNote) w.push('No daily note');
+                  if (!job.eodSubmittedToday) w.push('Awaiting end-of-day');
+                  return w.length > 0 ? (
+                    <div className="mt-2 py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                      {w.join(' · ')}
+                    </div>
+                  ) : null;
+                })()}
               </li>
             ))}
           </ul>
