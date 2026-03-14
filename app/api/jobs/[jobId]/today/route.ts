@@ -194,10 +194,33 @@ export async function GET(
     }
   }
 
+  const todayUtc = new Date().toISOString().slice(0, 10);
+  let endOfDay: { submitted: boolean; submittedAt: string | null; summary: string | null } = {
+    submitted: false,
+    submittedAt: null,
+    summary: null,
+  };
+  if (activeStage?.id) {
+    const { data: eodRow, error: eodErr } = await supabaseAdmin
+      .from('stage_end_of_day')
+      .select('submitted_at, summary')
+      .eq('stage_id', activeStage.id)
+      .eq('report_date', todayUtc)
+      .maybeSingle();
+    if (!eodErr && eodRow) {
+      endOfDay = {
+        submitted: true,
+        submittedAt: typeof eodRow.submitted_at === 'string' ? eodRow.submitted_at : null,
+        summary: typeof eodRow.summary === 'string' ? eodRow.summary : (eodRow.summary === null ? null : String(eodRow.summary)),
+      };
+    }
+  }
+
   const body: {
     ok: true;
     job: typeof job;
     activeStage: typeof activeStage;
+    endOfDay: typeof endOfDay;
     brief: typeof brief;
     photos: typeof photos;
     completions: Record<string, string>;
@@ -207,6 +230,7 @@ export async function GET(
     ok: true,
     job,
     activeStage,
+    endOfDay,
     brief,
     photos,
     completions,
