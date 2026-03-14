@@ -55,6 +55,7 @@ type JobOverviewEntry = {
   activeStageLastUpdatedAt: string | null;
   blockerType?: string | null;
   labourHoursToday?: number | null;
+  quotedLabourHours?: number | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -111,7 +112,7 @@ export async function GET(request: NextRequest) {
 
   const { data: stages, error: stagesError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, daily_note, daily_note_updated_at, checklist_templates(name, checklist_template_items(id))')
+    .select('id, job_id, name, daily_note, daily_note_updated_at, quoted_labour_hours, checklist_templates(name, checklist_template_items(id))')
     .in('job_id', jobIds)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -229,6 +230,7 @@ export async function GET(request: NextRequest) {
         activeStageLastUpdatedAt: null,
         blockerType: null,
         labourHoursToday: null,
+        quotedLabourHours: null,
       };
     }
     const jobStages = stagesByJob.get(job.id) ?? [];
@@ -245,6 +247,7 @@ export async function GET(request: NextRequest) {
         activeStageLastUpdatedAt: null,
         blockerType: null,
         labourHoursToday: null,
+        quotedLabourHours: null,
       };
     }
     const activeTemplate = Array.isArray(activeStage.checklist_templates) ? activeStage.checklist_templates[0] : activeStage.checklist_templates;
@@ -267,6 +270,8 @@ export async function GET(request: NextRequest) {
     const activeStageLastUpdatedAt = Number.isNaN(latestTs) ? null : new Date(latestTs).toISOString();
     const blockerType = blockerTypeByStage.get(activeStage.id) ?? null;
     const labourHoursToday = labourHoursByStage.has(activeStage.id) ? labourHoursByStage.get(activeStage.id)! : null;
+    const quotedRaw = activeStage.quoted_labour_hours;
+    const quotedLabourHours = quotedRaw != null && !Number.isNaN(Number(quotedRaw)) && Number(quotedRaw) >= 0 ? Number(quotedRaw) : null;
     return {
       id: job.id,
       name: job.name,
@@ -278,6 +283,7 @@ export async function GET(request: NextRequest) {
       activeStageLastUpdatedAt,
       blockerType,
       labourHoursToday,
+      quotedLabourHours,
     };
   });
 
