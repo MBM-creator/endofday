@@ -176,7 +176,7 @@ export async function PATCH(
         submitted_at: submittedAt,
         summary: summaryToStore,
       },
-      { onConflict: ['stage_id', 'report_date'] }
+      { onConflict: 'stage_id,report_date' }
     );
 
   if (upsertError) {

@@ -199,7 +199,7 @@ export async function PATCH(
 
   const { data: stage, error: fetchError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, sort_order, created_at, checklist_template_id, checklist_templates(name, checklist_template_items(item_type, label, sort_order))')
+    .select('id, job_id, name, sort_order, created_at, checklist_template_id, checklist_templates(name, checklist_template_items(id, item_type, label, sort_order))')
     .eq('id', stageId)
     .single();
 
