@@ -88,6 +88,11 @@ export default function TodaysWorkPage() {
   const [eodError, setEodError] = useState<string | null>(null);
   const [endOfDayHistory, setEndOfDayHistory] = useState<EndOfDayHistoryEntry[]>([]);
 
+  const [blockerType, setBlockerType] = useState('');
+  const [blockerNote, setBlockerNote] = useState('');
+  const [blockerSaving, setBlockerSaving] = useState(false);
+  const [blockerError, setBlockerError] = useState<string | null>(null);
+
   // Single consolidated load for Today's Work data
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -113,6 +118,9 @@ export default function TodaysWorkPage() {
     setEodSummary('');
     setEodError(null);
     setEndOfDayHistory([]);
+    setBlockerType('');
+    setBlockerNote('');
+    setBlockerError(null);
 
     fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -277,6 +285,36 @@ export default function TodaysWorkPage() {
     }
   }
 
+  async function saveBlocker() {
+    if (!activeStage?.id || !orgSlug || blockerSaving) return;
+    setBlockerSaving(true);
+    setBlockerError(null);
+    const typeTrimmed = blockerType.trim();
+    const noteTrimmed = blockerNote.trim() || null;
+    const payload = typeTrimmed ? { blockerType: typeTrimmed, note: noteTrimmed } : { blockerType: null, note: noteTrimmed };
+    try {
+      const res = await fetch(
+        `/api/stages/${activeStage.id}/blocker?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        setBlockerType(data.blockerType ?? '');
+        setBlockerNote(data.note ?? '');
+      } else {
+        setBlockerError(typeof data?.message === 'string' ? data.message : 'Could not save blocker');
+      }
+    } catch {
+      setBlockerError('Could not save blocker');
+    } finally {
+      setBlockerSaving(false);
+    }
+  }
+
   const hasActiveStage = !!activeStage;
 
   const checklistItems = activeStage?.checklist_templates?.checklist_template_items ?? [];
@@ -414,6 +452,56 @@ export default function TodaysWorkPage() {
                   className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   {dailyNoteSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Blocker</h2>
+              {blockerType && (
+                <div className="mb-2 py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                  &#9888; Blocked: {blockerType}
+                  {blockerNote && (
+                    <p className="mt-1 text-amber-800/90">{blockerNote}</p>
+                  )}
+                </div>
+              )}
+              {blockerError && (
+                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {blockerError}
+                </div>
+              )}
+              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <select
+                  value={blockerType}
+                  onChange={(e) => setBlockerType(e.target.value)}
+                  disabled={blockerSaving}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm bg-white disabled:opacity-50"
+                  aria-label="Blocker type"
+                >
+                  <option value="">None</option>
+                  <option value="Materials missing">Materials missing</option>
+                  <option value="Client decision required">Client decision required</option>
+                  <option value="Weather">Weather</option>
+                  <option value="Access issue">Access issue</option>
+                  <option value="Other">Other</option>
+                </select>
+                <textarea
+                  value={blockerNote}
+                  onChange={(e) => setBlockerNote(e.target.value)}
+                  rows={2}
+                  className="mt-2 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm resize-y min-h-[60px]"
+                  placeholder="Optional note…"
+                  disabled={blockerSaving}
+                  aria-label="Blocker note"
+                />
+                <button
+                  type="button"
+                  onClick={saveBlocker}
+                  disabled={blockerSaving}
+                  className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {blockerSaving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </section>
