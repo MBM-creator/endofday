@@ -52,6 +52,12 @@ interface EndOfDay {
   summary: string | null;
 }
 
+interface EndOfDayHistoryEntry {
+  reportDate: string;
+  submittedAt: string;
+  summary: string | null;
+}
+
 export default function TodaysWorkPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
@@ -80,6 +86,7 @@ export default function TodaysWorkPage() {
   const [eodSummary, setEodSummary] = useState('');
   const [eodSaving, setEodSaving] = useState(false);
   const [eodError, setEodError] = useState<string | null>(null);
+  const [endOfDayHistory, setEndOfDayHistory] = useState<EndOfDayHistoryEntry[]>([]);
 
   // Single consolidated load for Today's Work data
   useEffect(() => {
@@ -105,6 +112,7 @@ export default function TodaysWorkPage() {
     setEndOfDay({ submitted: false, submittedAt: null, summary: null });
     setEodSummary('');
     setEodError(null);
+    setEndOfDayHistory([]);
 
     fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -118,6 +126,7 @@ export default function TodaysWorkPage() {
           brief?: JobBrief | null;
           photos?: PreCommencementPhoto[];
           completions?: Record<string, string>;
+          endOfDayHistory?: EndOfDayHistoryEntry[];
           briefError?: string | null;
           photosError?: string | null;
           message?: string;
@@ -150,6 +159,7 @@ export default function TodaysWorkPage() {
             : { submitted: false, submittedAt: null, summary: null }
         );
         setEodSummary(data.endOfDay?.summary ?? '');
+        setEndOfDayHistory(Array.isArray(data.endOfDayHistory) ? data.endOfDayHistory : []);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -411,6 +421,40 @@ export default function TodaysWorkPage() {
                   </button>
                 </div>
               )}
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Recent end-of-day</h2>
+              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                {endOfDayHistory.length === 0 ? (
+                  <p className="text-sm text-gray-500">No recent submissions</p>
+                ) : (
+                  <ul className="space-y-3 text-sm text-gray-700">
+                    {endOfDayHistory.map((entry, idx) => (
+                      <li key={`${entry.reportDate}-${idx}`} className="border-b border-gray-100 last:border-0 last:pb-0 pb-3">
+                        <span className="font-medium text-gray-900">
+                          {(() => {
+                            const parts = entry.reportDate.split('-');
+                            if (parts.length === 3) {
+                              const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+                              return Number.isNaN(d.getTime()) ? entry.reportDate : d.toLocaleDateString(undefined, { dateStyle: 'short' });
+                            }
+                            return entry.reportDate;
+                          })()}
+                        </span>
+                        <span className="ml-2 text-gray-500">
+                          {new Date(entry.submittedAt).toLocaleTimeString(undefined, { timeStyle: 'short' })}
+                        </span>
+                        {entry.summary && (
+                          <pre className="mt-1 whitespace-pre-wrap font-sans text-gray-600 break-words">
+                            {entry.summary}
+                          </pre>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </section>
 
             <section>
