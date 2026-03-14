@@ -9,6 +9,7 @@ interface Job {
   name: string;
   site_id: string | null;
   created_at: string;
+  active_stage_id?: string | null;
 }
 
 interface Stage {
@@ -59,6 +60,8 @@ export default function JobDetailPage() {
   const [stageName, setStageName] = useState('');
   const [isSubmittingStage, setIsSubmittingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
+  const [stageIdSettingActive, setStageIdSettingActive] = useState<string | null>(null);
+  const [activeStageError, setActiveStageError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -205,6 +208,31 @@ export default function JobDetailPage() {
       }
     } catch {
       // Keep existing stages on refetch failure
+    }
+  }
+
+  async function setActiveStage(stageId: string) {
+    setActiveStageError(null);
+    setStageIdSettingActive(stageId);
+    try {
+      const res = await fetch(
+        `/api/jobs/${jobId}?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ activeStageId: stageId }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok && data.job) {
+        setJob(data.job);
+      } else {
+        setActiveStageError(typeof data?.message === 'string' ? data.message : 'Failed to set active stage');
+      }
+    } catch {
+      setActiveStageError('Failed to set active stage');
+    } finally {
+      setStageIdSettingActive(null);
     }
   }
 
@@ -453,23 +481,53 @@ export default function JobDetailPage() {
                 {isSubmittingStage ? 'Adding…' : 'Add stage'}
               </button>
             </form>
+            {activeStageError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                {activeStageError}
+              </div>
+            )}
             {stages.length === 0 ? (
               <p className="text-gray-600">No stages yet.</p>
             ) : (
               <ul className="space-y-3">
-                {stages.map((stage) => (
-                  <li
-                    key={stage.id}
-                    className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
-                  >
-                    <span className="font-medium text-gray-900">{stage.name}</span>
-                    {stage.created_at && (
-                      <span className="ml-2 text-sm text-gray-500">
-                        {formatDate(stage.created_at)}
-                      </span>
-                    )}
-                  </li>
-                ))}
+                {stages.map((stage) => {
+                  const isActive = job?.active_stage_id === stage.id;
+                  const isSetting = stageIdSettingActive === stage.id;
+                  return (
+                    <li
+                      key={stage.id}
+                      className={`p-4 rounded-lg shadow-sm border ${
+                        isActive
+                          ? 'bg-[#698F00]/10 border-[#698F00]'
+                          : 'bg-white border-gray-200'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-gray-900">{stage.name}</span>
+                        {stage.created_at && (
+                          <span className="text-sm text-gray-500">
+                            {formatDate(stage.created_at)}
+                          </span>
+                        )}
+                        {isActive && (
+                          <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
+                            Active
+                          </span>
+                        )}
+                        {!isActive && (
+                          <button
+                            type="button"
+                            onClick={() => setActiveStage(stage.id)}
+                            disabled={!!stageIdSettingActive}
+                            className="text-sm text-[#698F00] hover:underline font-medium disabled:opacity-50"
+                          >
+                            {isSetting ? 'Setting…' : 'Set as active'}
+                          </button>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             )}
 
