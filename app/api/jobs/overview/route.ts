@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
     .map((j: { active_stage_id?: string | null }) => j.active_stage_id)
     .filter((id: string | null | undefined): id is string => id != null && id !== '');
 
-  let completionsRows: { stage_id: string; checklist_template_item_id: string; completed_at?: string }[] = [];
+  let completionsRows: { stage_id: string; checklist_template_item_id: string; completed_at: string }[] = [];
   if (activeStageIds.length > 0) {
     const { data: compRows, error: compErr } = await supabaseAdmin
       .from('stage_checklist_completions')
@@ -133,8 +133,10 @@ export async function GET(request: NextRequest) {
       .in('stage_id', activeStageIds);
     if (!compErr && compRows) {
       completionsRows = compRows.filter(
-        (r): r is { stage_id: string; checklist_template_item_id: string; completed_at?: string } =>
-          typeof r.stage_id === 'string' && typeof r.checklist_template_item_id === 'string'
+        (r): r is { stage_id: string; checklist_template_item_id: string; completed_at: string } =>
+          typeof r.stage_id === 'string' &&
+          typeof r.checklist_template_item_id === 'string' &&
+          typeof r.completed_at === 'string'
       );
     }
   }
