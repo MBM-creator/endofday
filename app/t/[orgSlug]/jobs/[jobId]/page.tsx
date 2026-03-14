@@ -12,6 +12,12 @@ interface Job {
   active_stage_id?: string | null;
 }
 
+interface ChecklistTemplateItem {
+  item_type: string;
+  label: string;
+  sort_order: number;
+}
+
 interface Stage {
   id: string;
   job_id: string;
@@ -19,7 +25,7 @@ interface Stage {
   sort_order: number;
   created_at: string;
   checklist_template_id?: string | null;
-  checklist_templates?: { name: string } | null;
+  checklist_templates?: { name: string; checklist_template_items?: ChecklistTemplateItem[] } | null;
 }
 
 interface ChecklistTemplate {
@@ -627,6 +633,43 @@ export default function JobDetailPage() {
                           <span className="text-xs text-gray-500">Saving…</span>
                         )}
                       </div>
+                      {stage.checklist_templates?.checklist_template_items &&
+                        stage.checklist_templates.checklist_template_items.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            {(() => {
+                              const items = [...stage.checklist_templates.checklist_template_items].sort(
+                                (a, b) => a.sort_order - b.sort_order
+                              );
+                              const byType = {
+                                tools: items.filter((i) => i.item_type === 'tools'),
+                                materials: items.filter((i) => i.item_type === 'materials'),
+                                qc: items.filter((i) => i.item_type === 'qc'),
+                              };
+                              const groups = [
+                                { key: 'tools' as const, label: 'Tools', list: byType.tools },
+                                { key: 'materials' as const, label: 'Materials', list: byType.materials },
+                                { key: 'qc' as const, label: 'QC', list: byType.qc },
+                              ];
+                              return (
+                                <div className="space-y-2 text-sm">
+                                  {groups.map(
+                                    (g) =>
+                                      g.list.length > 0 && (
+                                        <div key={g.key}>
+                                          <span className="font-medium text-gray-700">{g.label}:</span>
+                                          <ul className="mt-0.5 ml-3 list-disc text-gray-600">
+                                            {g.list.map((item, idx) => (
+                                              <li key={idx}>{item.label}</li>
+                                            ))}
+                                          </ul>
+                                        </div>
+                                      )
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
                     </li>
                   );
                 })}
