@@ -216,11 +216,44 @@ export async function GET(
     }
   }
 
+  type EndOfDayHistoryEntry = { reportDate: string; submittedAt: string; summary: string | null };
+  let endOfDayHistory: EndOfDayHistoryEntry[] = [];
+  if (activeStage?.id) {
+    const { data: historyRows, error: historyErr } = await supabaseAdmin
+      .from('stage_end_of_day')
+      .select('report_date, submitted_at, summary')
+      .eq('stage_id', activeStage.id)
+      .order('report_date', { ascending: false })
+      .limit(5);
+    if (!historyErr && Array.isArray(historyRows)) {
+      endOfDayHistory = historyRows.map((row) => {
+        const rawSubmitted = row.submitted_at;
+        let submittedAt: string;
+        if (typeof rawSubmitted === 'string') {
+          submittedAt = rawSubmitted;
+        } else if (rawSubmitted instanceof Date) {
+          submittedAt = rawSubmitted.toISOString();
+        } else {
+          submittedAt = '';
+        }
+        return {
+          reportDate: typeof row.report_date === 'string' ? row.report_date : String(row.report_date),
+          submittedAt,
+          summary: row.summary === null || row.summary === undefined ? null : String(row.summary),
+        };
+      });
+    } else if (historyErr) {
+      const supabaseErr = normalizeSupabaseError(historyErr);
+      console.error('[api/jobs/[jobId]/today] EOD history fetch failed:', { requestId, supabaseError: supabaseErr });
+    }
+  }
+
   const body: {
     ok: true;
     job: typeof job;
     activeStage: typeof activeStage;
     endOfDay: typeof endOfDay;
+    endOfDayHistory: EndOfDayHistoryEntry[];
     brief: typeof brief;
     photos: typeof photos;
     completions: Record<string, string>;
@@ -231,6 +264,7 @@ export async function GET(
     job,
     activeStage,
     endOfDay,
+    endOfDayHistory,
     brief,
     photos,
     completions,
