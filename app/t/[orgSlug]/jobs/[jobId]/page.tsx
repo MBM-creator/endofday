@@ -14,6 +14,7 @@ interface Job {
 }
 
 interface ChecklistTemplateItem {
+  id: string;
   item_type: string;
   label: string;
   sort_order: number;
@@ -81,6 +82,11 @@ export default function JobDetailPage() {
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [stageIdUpdatingTemplate, setStageIdUpdatingTemplate] = useState<string | null>(null);
   const [templateUpdateError, setTemplateUpdateError] = useState<string | null>(null);
+  const [activeStageStatus, setActiveStageStatus] = useState<{
+    completions: Record<string, string>;
+    dailyNote: string | null;
+    endOfDaySubmitted: boolean;
+  } | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -235,6 +241,34 @@ export default function JobDetailPage() {
       cancelled = true;
     };
   }, [orgSlug, job]);
+
+  useEffect(() => {
+    if (!job?.active_stage_id || !orgSlug || !jobId) {
+      setActiveStageStatus(null);
+      return;
+    }
+    let cancelled = false;
+    fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json().then((data) => ({ res, data })))
+      .then(({ res, data }: { res: Response; data: { ok?: boolean; activeStage?: { daily_note?: string | null }; completions?: Record<string, string>; endOfDay?: { submitted?: boolean }; message?: string } }) => {
+        if (cancelled) return;
+        if (!res.ok || !data?.ok) {
+          setActiveStageStatus(null);
+          return;
+        }
+        setActiveStageStatus({
+          completions: typeof data.completions === 'object' && data.completions != null ? data.completions : {},
+          dailyNote: data.activeStage?.daily_note ?? null,
+          endOfDaySubmitted: data.endOfDay?.submitted === true,
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setActiveStageStatus(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job?.active_stage_id, jobId, orgSlug]);
 
   async function refetchPhotos() {
     if (!orgSlug || !jobId) return;
@@ -477,6 +511,24 @@ export default function JobDetailPage() {
                 Today&apos;s Work
               </Link>
             </div>
+
+            {job.active_stage_id && activeStageStatus && (() => {
+              const activeStage = stages.find((s) => s.id === job.active_stage_id);
+              const checklistItems = activeStage?.checklist_templates?.checklist_template_items ?? [];
+              const checklistTotal = checklistItems.length;
+              const checklistCompleted = checklistItems.filter((item) => activeStageStatus.completions[item.id]).length;
+              const hasSavedNote = (activeStageStatus.dailyNote ?? '').trim() !== '';
+              const eodSubmitted = activeStageStatus.endOfDaySubmitted;
+              return (
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 mb-4 bg-white/80 border border-gray-200 rounded-lg text-sm text-gray-600">
+                  <span>
+                    Checklist {checklistCompleted} / {checklistTotal}
+                  </span>
+                  <span>{hasSavedNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
+                  <span>{eodSubmitted ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
+                </div>
+              );
+            })()}
 
             <h2 className="text-lg font-semibold text-gray-900 mb-3">Job brief</h2>
             {briefLoading && (
