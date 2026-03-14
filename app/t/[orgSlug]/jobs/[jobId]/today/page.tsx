@@ -93,6 +93,11 @@ export default function TodaysWorkPage() {
   const [blockerSaving, setBlockerSaving] = useState(false);
   const [blockerError, setBlockerError] = useState<string | null>(null);
 
+  const [crewCount, setCrewCount] = useState(0);
+  const [hoursWorked, setHoursWorked] = useState(0);
+  const [labourSaving, setLabourSaving] = useState(false);
+  const [labourError, setLabourError] = useState<string | null>(null);
+
   // Single consolidated load for Today's Work data
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -121,6 +126,9 @@ export default function TodaysWorkPage() {
     setBlockerType('');
     setBlockerNote('');
     setBlockerError(null);
+    setCrewCount(0);
+    setHoursWorked(0);
+    setLabourError(null);
 
     fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -315,6 +323,35 @@ export default function TodaysWorkPage() {
     }
   }
 
+  async function saveLabour() {
+    if (!activeStage?.id || !orgSlug || labourSaving) return;
+    const crew = Math.max(0, Number(crewCount));
+    const hours = Math.max(0, Number(hoursWorked));
+    setLabourSaving(true);
+    setLabourError(null);
+    try {
+      const res = await fetch(
+        `/api/stages/${activeStage.id}/labour?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ crewCount: crew, hoursWorked: hours }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        setCrewCount(typeof data.crewCount === 'number' ? data.crewCount : crew);
+        setHoursWorked(typeof data.hoursWorked === 'number' ? data.hoursWorked : hours);
+      } else {
+        setLabourError(typeof data?.message === 'string' ? data.message : 'Could not save labour');
+      }
+    } catch {
+      setLabourError('Could not save labour');
+    } finally {
+      setLabourSaving(false);
+    }
+  }
+
   const hasActiveStage = !!activeStage;
 
   const checklistItems = activeStage?.checklist_templates?.checklist_template_items ?? [];
@@ -502,6 +539,49 @@ export default function TodaysWorkPage() {
                   className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
                   {blockerSaving ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Labour today</h2>
+              {labourError && (
+                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {labourError}
+                </div>
+              )}
+              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Crew size</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={crewCount}
+                  onChange={(e) => setCrewCount(Math.max(0, Number(e.target.value) || 0))}
+                  disabled={labourSaving}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm disabled:opacity-50"
+                  aria-label="Crew size"
+                />
+                <label className="block mt-2 text-sm font-medium text-gray-700 mb-1">Hours worked</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={hoursWorked}
+                  onChange={(e) => setHoursWorked(Math.max(0, Number(e.target.value) || 0))}
+                  disabled={labourSaving}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm disabled:opacity-50"
+                  aria-label="Hours worked"
+                />
+                <p className="mt-2 text-sm text-gray-600">
+                  Total labour: {crewCount * hoursWorked} hours
+                </p>
+                <button
+                  type="button"
+                  onClick={saveLabour}
+                  disabled={labourSaving}
+                  className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {labourSaving ? 'Saving…' : 'Save'}
                 </button>
               </div>
             </section>
