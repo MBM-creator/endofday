@@ -12,6 +12,8 @@ interface JobOverviewEntry {
   hasDailyNote: boolean;
   eodSubmittedToday: boolean;
   activeStageLastUpdatedAt?: string | null;
+  blockerType?: string | null;
+  labourHoursToday?: number | null;
 }
 
 export default function OverviewPage() {
@@ -98,6 +100,16 @@ export default function OverviewPage() {
                   <span>{job.hasDailyNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
                   <span>{job.eodSubmittedToday ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
                 </div>
+                {job.activeStageName != null && job.labourHoursToday != null && (
+                  <p className="mt-2 text-sm text-gray-500">
+                    Labour today: {job.labourHoursToday}h
+                  </p>
+                )}
+                {job.activeStageName != null && job.blockerType && (
+                  <div className="mt-2 py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                    &#9888; Blocked: {job.blockerType}
+                  </div>
+                )}
                 {job.activeStageName != null && (() => {
                   const w: string[] = [];
                   if (job.checklistTotal > 0 && job.checklistCompleted < job.checklistTotal) w.push('Checklist incomplete');

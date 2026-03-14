@@ -53,6 +53,8 @@ type JobOverviewEntry = {
   hasDailyNote: boolean;
   eodSubmittedToday: boolean;
   activeStageLastUpdatedAt: string | null;
+  blockerType?: string | null;
+  labourHoursToday?: number | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -159,6 +161,39 @@ export async function GET(request: NextRequest) {
   }
   const eodStageIds = new Set(eodSubmittedAtByStage.keys());
 
+  const blockerTypeByStage = new Map<string, string>();
+  if (activeStageIds.length > 0) {
+    const { data: blockerRows, error: blockerErr } = await supabaseAdmin
+      .from('stage_blockers')
+      .select('stage_id, blocker_type')
+      .in('stage_id', activeStageIds)
+      .eq('report_date', todayUtc);
+    if (!blockerErr && blockerRows) {
+      for (const row of blockerRows) {
+        if (typeof row.stage_id === 'string' && typeof row.blocker_type === 'string') {
+          blockerTypeByStage.set(row.stage_id, row.blocker_type);
+        }
+      }
+    }
+  }
+
+  const labourHoursByStage = new Map<string, number>();
+  if (activeStageIds.length > 0) {
+    const { data: labourRows, error: labourErr } = await supabaseAdmin
+      .from('stage_labour')
+      .select('stage_id, labour_hours')
+      .in('stage_id', activeStageIds)
+      .eq('report_date', todayUtc);
+    if (!labourErr && labourRows) {
+      for (const row of labourRows) {
+        if (typeof row.stage_id === 'string' && row.labour_hours != null) {
+          const n = Number(row.labour_hours);
+          if (!Number.isNaN(n) && n >= 0) labourHoursByStage.set(row.stage_id, n);
+        }
+      }
+    }
+  }
+
   const stagesByJob = new Map<string, typeof stagesList[0][]>();
   for (const s of stagesList) {
     const jid = s.job_id;
@@ -192,6 +227,8 @@ export async function GET(request: NextRequest) {
         hasDailyNote: false,
         eodSubmittedToday: false,
         activeStageLastUpdatedAt: null,
+        blockerType: null,
+        labourHoursToday: null,
       };
     }
     const jobStages = stagesByJob.get(job.id) ?? [];
@@ -206,6 +243,8 @@ export async function GET(request: NextRequest) {
         hasDailyNote: false,
         eodSubmittedToday: false,
         activeStageLastUpdatedAt: null,
+        blockerType: null,
+        labourHoursToday: null,
       };
     }
     const activeTemplate = Array.isArray(activeStage.checklist_templates) ? activeStage.checklist_templates[0] : activeStage.checklist_templates;
@@ -226,6 +265,8 @@ export async function GET(request: NextRequest) {
     const allTs = [...completionTimestamps, ...(Number.isNaN(dailyNoteTs) ? [] : [dailyNoteTs]), ...(Number.isNaN(eodTsNum) ? [] : [eodTsNum])];
     const latestTs = allTs.length > 0 ? Math.max(...allTs) : NaN;
     const activeStageLastUpdatedAt = Number.isNaN(latestTs) ? null : new Date(latestTs).toISOString();
+    const blockerType = blockerTypeByStage.get(activeStage.id) ?? null;
+    const labourHoursToday = labourHoursByStage.has(activeStage.id) ? labourHoursByStage.get(activeStage.id)! : null;
     return {
       id: job.id,
       name: job.name,
@@ -235,6 +276,8 @@ export async function GET(request: NextRequest) {
       hasDailyNote,
       eodSubmittedToday,
       activeStageLastUpdatedAt,
+      blockerType,
+      labourHoursToday,
     };
   });
 
