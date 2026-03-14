@@ -114,7 +114,7 @@ export async function GET(
 
   const { data: stages, error: stagesError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, sort_order, created_at, checklist_template_id, daily_note, daily_note_updated_at, checklist_templates(name, checklist_template_items(id, item_type, label, sort_order))')
+    .select('id, job_id, name, sort_order, created_at, checklist_template_id, daily_note, daily_note_updated_at, quoted_labour_hours, checklist_templates(name, checklist_template_items(id, item_type, label, sort_order))')
     .eq('job_id', jobId)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -248,6 +248,27 @@ export async function GET(
     }
   }
 
+  let quotedLabourHours: number | null = null;
+  let actualLabourHoursTotal = 0;
+  if (activeStage?.id) {
+    const quotedRaw = activeStage.quoted_labour_hours;
+    if (quotedRaw != null && !Number.isNaN(Number(quotedRaw)) && Number(quotedRaw) >= 0) {
+      quotedLabourHours = Number(quotedRaw);
+    }
+    const { data: labourRows, error: labourErr } = await supabaseAdmin
+      .from('stage_labour')
+      .select('labour_hours')
+      .eq('stage_id', activeStage.id);
+    if (!labourErr && Array.isArray(labourRows)) {
+      for (const row of labourRows) {
+        if (row.labour_hours != null) {
+          const n = Number(row.labour_hours);
+          if (!Number.isNaN(n) && n >= 0) actualLabourHoursTotal += n;
+        }
+      }
+    }
+  }
+
   const body: {
     ok: true;
     job: typeof job;
@@ -257,6 +278,8 @@ export async function GET(
     brief: typeof brief;
     photos: typeof photos;
     completions: Record<string, string>;
+    quotedLabourHours: number | null;
+    actualLabourHoursTotal: number;
     briefError?: string | null;
     photosError?: string | null;
   } = {
@@ -268,6 +291,8 @@ export async function GET(
     brief,
     photos,
     completions,
+    quotedLabourHours,
+    actualLabourHoursTotal,
   };
   if (briefError != null) body.briefError = briefError;
   if (photosError != null) body.photosError = photosError;

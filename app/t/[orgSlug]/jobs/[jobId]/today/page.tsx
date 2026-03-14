@@ -98,6 +98,9 @@ export default function TodaysWorkPage() {
   const [labourSaving, setLabourSaving] = useState(false);
   const [labourError, setLabourError] = useState<string | null>(null);
 
+  const [quotedLabourHours, setQuotedLabourHours] = useState<number | null>(null);
+  const [actualLabourHoursTotal, setActualLabourHoursTotal] = useState(0);
+
   // Single consolidated load for Today's Work data
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -129,6 +132,8 @@ export default function TodaysWorkPage() {
     setCrewCount(0);
     setHoursWorked(0);
     setLabourError(null);
+    setQuotedLabourHours(null);
+    setActualLabourHoursTotal(0);
 
     fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -143,6 +148,8 @@ export default function TodaysWorkPage() {
           photos?: PreCommencementPhoto[];
           completions?: Record<string, string>;
           endOfDayHistory?: EndOfDayHistoryEntry[];
+          quotedLabourHours?: number | null;
+          actualLabourHoursTotal?: number;
           briefError?: string | null;
           photosError?: string | null;
           message?: string;
@@ -176,6 +183,8 @@ export default function TodaysWorkPage() {
         );
         setEodSummary(data.endOfDay?.summary ?? '');
         setEndOfDayHistory(Array.isArray(data.endOfDayHistory) ? data.endOfDayHistory : []);
+        setQuotedLabourHours(typeof data.quotedLabourHours === 'number' ? data.quotedLabourHours : (data.quotedLabourHours ?? null));
+        setActualLabourHoursTotal(typeof data.actualLabourHoursTotal === 'number' ? data.actualLabourHoursTotal : 0);
       })
       .catch((err) => {
         if (!cancelled) {
@@ -342,6 +351,11 @@ export default function TodaysWorkPage() {
       if (res.ok && data?.ok) {
         setCrewCount(typeof data.crewCount === 'number' ? data.crewCount : crew);
         setHoursWorked(typeof data.hoursWorked === 'number' ? data.hoursWorked : hours);
+        const refetchRes = await fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`);
+        const refetchData = await refetchRes.json();
+        if (refetchRes.ok && refetchData?.ok && typeof refetchData.actualLabourHoursTotal === 'number') {
+          setActualLabourHoursTotal(refetchData.actualLabourHoursTotal);
+        }
       } else {
         setLabourError(typeof data?.message === 'string' ? data.message : 'Could not save labour');
       }
@@ -583,6 +597,25 @@ export default function TodaysWorkPage() {
                 >
                   {labourSaving ? 'Saving…' : 'Save'}
                 </button>
+              </div>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Quoted vs actual labour</h2>
+              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <p className="text-sm text-gray-600">
+                  Quoted labour: {quotedLabourHours != null ? `${quotedLabourHours}h` : '—'}
+                </p>
+                <p className="mt-1 text-sm text-gray-600">
+                  Actual labour: {actualLabourHoursTotal}h
+                </p>
+                {quotedLabourHours != null && (
+                  <p className="mt-1 text-sm text-gray-600">
+                    {actualLabourHoursTotal <= quotedLabourHours
+                      ? `Remaining: ${quotedLabourHours - actualLabourHoursTotal}h`
+                      : `Overrun: ${actualLabourHoursTotal - quotedLabourHours}h`}
+                  </p>
+                )}
               </div>
             </section>
 

@@ -14,6 +14,7 @@ interface JobOverviewEntry {
   activeStageLastUpdatedAt?: string | null;
   blockerType?: string | null;
   labourHoursToday?: number | null;
+  quotedLabourHours?: number | null;
 }
 
 export default function OverviewPage() {
