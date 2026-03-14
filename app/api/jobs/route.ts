@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
   const { data: jobs, error: jobsError } = await supabaseAdmin
     .from('jobs')
-    .select('id, organisation_id, name, site_id, created_at')
+    .select('id, organisation_id, name, site_id, created_at, active_stage_id')
     .eq('organisation_id', org.id)
     .order('created_at', { ascending: false });
 
