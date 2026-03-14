@@ -46,6 +46,12 @@ interface JobBrief {
   updated_at: string;
 }
 
+interface EndOfDay {
+  submitted: boolean;
+  submittedAt: string | null;
+  summary: string | null;
+}
+
 export default function TodaysWorkPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
@@ -70,6 +76,11 @@ export default function TodaysWorkPage() {
   const [dailyNoteSaving, setDailyNoteSaving] = useState(false);
   const [dailyNoteError, setDailyNoteError] = useState<string | null>(null);
 
+  const [endOfDay, setEndOfDay] = useState<EndOfDay>({ submitted: false, submittedAt: null, summary: null });
+  const [eodSummary, setEodSummary] = useState('');
+  const [eodSaving, setEodSaving] = useState(false);
+  const [eodError, setEodError] = useState<string | null>(null);
+
   // Single consolidated load for Today's Work data
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -91,6 +102,9 @@ export default function TodaysWorkPage() {
     setCompletionsError(null);
     setDailyNote('');
     setDailyNoteError(null);
+    setEndOfDay({ submitted: false, submittedAt: null, summary: null });
+    setEodSummary('');
+    setEodError(null);
 
     fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -100,6 +114,7 @@ export default function TodaysWorkPage() {
           ok?: boolean;
           job?: Job;
           activeStage?: Stage | null;
+          endOfDay?: EndOfDay;
           brief?: JobBrief | null;
           photos?: PreCommencementPhoto[];
           completions?: Record<string, string>;
@@ -125,6 +140,16 @@ export default function TodaysWorkPage() {
         setBriefError(data.briefError ?? null);
         setPhotosError(data.photosError ?? null);
         setDailyNote(data.activeStage?.daily_note ?? '');
+        setEndOfDay(
+          data.endOfDay && typeof data.endOfDay.submitted === 'boolean'
+            ? {
+                submitted: data.endOfDay.submitted,
+                submittedAt: data.endOfDay.submittedAt ?? null,
+                summary: data.endOfDay.summary ?? null,
+              }
+            : { submitted: false, submittedAt: null, summary: null }
+        );
+        setEodSummary(data.endOfDay?.summary ?? '');
       })
       .catch((err) => {
         if (!cancelled) {
@@ -209,6 +234,36 @@ export default function TodaysWorkPage() {
       setDailyNoteError('Could not save note');
     } finally {
       setDailyNoteSaving(false);
+    }
+  }
+
+  async function submitEndOfDay() {
+    if (!activeStage?.id || !orgSlug || eodSaving) return;
+    setEodSaving(true);
+    setEodError(null);
+    try {
+      const res = await fetch(
+        `/api/stages/${activeStage.id}/end-of-day?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ summary: eodSummary.trim() || undefined }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        setEndOfDay({
+          submitted: true,
+          submittedAt: data.submittedAt ?? new Date().toISOString(),
+          summary: data.summary ?? (eodSummary.trim() || null),
+        });
+      } else {
+        setEodError(typeof data?.message === 'string' ? data.message : 'Could not save');
+      }
+    } catch {
+      setEodError('Could not save');
+    } finally {
+      setEodSaving(false);
     }
   }
 
@@ -298,6 +353,50 @@ export default function TodaysWorkPage() {
                   {dailyNoteSaving ? 'Saving…' : 'Save'}
                 </button>
               </div>
+            </section>
+
+            <section>
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">End of day</h2>
+              {eodError && (
+                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {eodError}
+                </div>
+              )}
+              {endOfDay.submitted ? (
+                <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                  <p className="font-medium text-[#698F00]">Done for today</p>
+                  {endOfDay.submittedAt && (
+                    <p className="mt-1 text-sm text-gray-600">
+                      Submitted {new Date(endOfDay.submittedAt).toLocaleString()}
+                    </p>
+                  )}
+                  {endOfDay.summary && (
+                    <pre className="mt-2 whitespace-pre-wrap font-sans text-gray-900 text-sm break-words">
+                      {endOfDay.summary}
+                    </pre>
+                  )}
+                </div>
+              ) : (
+                <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                  <textarea
+                    value={eodSummary}
+                    onChange={(e) => setEodSummary(e.target.value)}
+                    rows={3}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm resize-y min-h-[60px]"
+                    placeholder="Optional short summary…"
+                    disabled={eodSaving}
+                    aria-label="End of day summary"
+                  />
+                  <button
+                    type="button"
+                    onClick={submitEndOfDay}
+                    disabled={eodSaving}
+                    className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {eodSaving ? 'Submitting…' : 'Mark as done for today'}
+                  </button>
+                </div>
+              )}
             </section>
 
             <section>
