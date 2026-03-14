@@ -56,6 +56,7 @@ type JobOverviewEntry = {
   blockerType?: string | null;
   labourHoursToday?: number | null;
   quotedLabourHours?: number | null;
+  actualLabourHoursTotal?: number | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -195,6 +196,25 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const actualLabourHoursTotalByStage = new Map<string, number>();
+  if (activeStageIds.length > 0) {
+    const { data: totalLabourRows, error: totalLabourErr } = await supabaseAdmin
+      .from('stage_labour')
+      .select('stage_id, labour_hours')
+      .in('stage_id', activeStageIds);
+    if (!totalLabourErr && totalLabourRows) {
+      for (const row of totalLabourRows) {
+        if (typeof row.stage_id === 'string' && row.labour_hours != null) {
+          const n = Number(row.labour_hours);
+          if (!Number.isNaN(n) && n >= 0) {
+            const prev = actualLabourHoursTotalByStage.get(row.stage_id) ?? 0;
+            actualLabourHoursTotalByStage.set(row.stage_id, prev + n);
+          }
+        }
+      }
+    }
+  }
+
   const stagesByJob = new Map<string, typeof stagesList[0][]>();
   for (const s of stagesList) {
     const jid = s.job_id;
@@ -231,6 +251,7 @@ export async function GET(request: NextRequest) {
         blockerType: null,
         labourHoursToday: null,
         quotedLabourHours: null,
+        actualLabourHoursTotal: null,
       };
     }
     const jobStages = stagesByJob.get(job.id) ?? [];
@@ -248,6 +269,7 @@ export async function GET(request: NextRequest) {
         blockerType: null,
         labourHoursToday: null,
         quotedLabourHours: null,
+        actualLabourHoursTotal: null,
       };
     }
     const activeTemplate = Array.isArray(activeStage.checklist_templates) ? activeStage.checklist_templates[0] : activeStage.checklist_templates;
@@ -272,6 +294,7 @@ export async function GET(request: NextRequest) {
     const labourHoursToday = labourHoursByStage.has(activeStage.id) ? labourHoursByStage.get(activeStage.id)! : null;
     const quotedRaw = activeStage.quoted_labour_hours;
     const quotedLabourHours = quotedRaw != null && !Number.isNaN(Number(quotedRaw)) && Number(quotedRaw) >= 0 ? Number(quotedRaw) : null;
+    const actualLabourHoursTotal = actualLabourHoursTotalByStage.get(activeStage.id) ?? null;
     return {
       id: job.id,
       name: job.name,
@@ -284,6 +307,7 @@ export async function GET(request: NextRequest) {
       blockerType,
       labourHoursToday,
       quotedLabourHours,
+      actualLabourHoursTotal,
     };
   });
 
