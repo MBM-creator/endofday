@@ -56,6 +56,9 @@ export default function JobDetailPage() {
   const [isEditingBrief, setIsEditingBrief] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [isSavingBrief, setIsSavingBrief] = useState(false);
+  const [stageName, setStageName] = useState('');
+  const [isSubmittingStage, setIsSubmittingStage] = useState(false);
+  const [stageError, setStageError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -189,6 +192,48 @@ export default function JobDetailPage() {
       }
     } catch {
       // Keep existing photos on refetch failure
+    }
+  }
+
+  async function refetchStages() {
+    if (!jobId) return;
+    try {
+      const res = await fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`);
+      const data = await res.json();
+      if (res.ok && data?.ok && Array.isArray(data.stages)) {
+        setStages(data.stages);
+      }
+    } catch {
+      // Keep existing stages on refetch failure
+    }
+  }
+
+  async function handleAddStage(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = stageName.trim();
+    if (!trimmed) {
+      setStageError('Stage name is required');
+      return;
+    }
+    setStageError(null);
+    setIsSubmittingStage(true);
+    try {
+      const res = await fetch('/api/stages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobId, name: trimmed }),
+      });
+      const data = await res.json();
+      if (res.ok && data?.ok) {
+        await refetchStages();
+        setStageName('');
+      } else {
+        setStageError(typeof data?.message === 'string' ? data.message : 'Failed to add stage');
+      }
+    } catch {
+      setStageError('Failed to add stage');
+    } finally {
+      setIsSubmittingStage(false);
     }
   }
 
@@ -386,6 +431,28 @@ export default function JobDetailPage() {
             )}
 
             <h2 className="text-lg font-semibold text-gray-900 mb-3 mt-8">Stages</h2>
+            {stageError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                {stageError}
+              </div>
+            )}
+            <form onSubmit={handleAddStage} className="mb-4 flex flex-col sm:flex-row gap-2">
+              <input
+                type="text"
+                value={stageName}
+                onChange={(e) => setStageName(e.target.value)}
+                placeholder="Stage name"
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900"
+                disabled={isSubmittingStage}
+              />
+              <button
+                type="submit"
+                disabled={isSubmittingStage}
+                className="bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+              >
+                {isSubmittingStage ? 'Adding…' : 'Add stage'}
+              </button>
+            </form>
             {stages.length === 0 ? (
               <p className="text-gray-600">No stages yet.</p>
             ) : (
