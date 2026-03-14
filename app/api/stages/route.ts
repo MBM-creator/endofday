@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
 
   const { data: stages, error: stagesError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, sort_order, created_at, checklist_template_id, checklist_templates(name)')
+    .select('id, job_id, name, sort_order, created_at, checklist_template_id, checklist_templates(name, checklist_template_items(item_type, label, sort_order))')
     .eq('job_id', jobId)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
