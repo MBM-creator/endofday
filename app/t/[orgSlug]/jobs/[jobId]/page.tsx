@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 interface Job {
@@ -469,6 +470,12 @@ export default function JobDetailPage() {
               {job.created_at && (
                 <p className="mt-1 text-sm text-gray-500">{formatDate(job.created_at)}</p>
               )}
+              <Link
+                href={`/t/${orgSlug}/jobs/${jobId}/today`}
+                className="mt-2 inline-block text-sm font-medium text-[#698F00] hover:underline"
+              >
+                Today&apos;s Work
+              </Link>
             </div>
 
             <h2 className="text-lg font-semibold text-gray-900 mb-3">Job brief</h2>
