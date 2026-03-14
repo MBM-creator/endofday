@@ -269,6 +269,12 @@ export default function TodaysWorkPage() {
 
   const hasActiveStage = !!activeStage;
 
+  const checklistItems = activeStage?.checklist_templates?.checklist_template_items ?? [];
+  const checklistTotal = checklistItems.length;
+  const checklistCompleted = checklistItems.filter((item) => completions[item.id]).length;
+  const hasSavedNote = ((activeStage?.daily_note ?? '').trim() !== '');
+  const eodSubmitted = endOfDay.submitted;
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -305,6 +311,14 @@ export default function TodaysWorkPage() {
               <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
                 Today&apos;s stage
               </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 bg-white/80 border border-gray-200 rounded-lg text-sm text-gray-600">
+              <span>
+                Checklist {checklistCompleted} / {checklistTotal}
+              </span>
+              <span>{hasSavedNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
+              <span>{eodSubmitted ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
             </div>
 
             <section>
