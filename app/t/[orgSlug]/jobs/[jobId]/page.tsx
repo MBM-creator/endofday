@@ -18,6 +18,13 @@ interface Stage {
   name: string;
   sort_order: number;
   created_at: string;
+  checklist_template_id?: string | null;
+  checklist_templates?: { name: string } | null;
+}
+
+interface ChecklistTemplate {
+  id: string;
+  name: string;
 }
 
 interface PreCommencementPhoto {
@@ -62,6 +69,11 @@ export default function JobDetailPage() {
   const [stageError, setStageError] = useState<string | null>(null);
   const [stageIdSettingActive, setStageIdSettingActive] = useState<string | null>(null);
   const [activeStageError, setActiveStageError] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [stageIdUpdatingTemplate, setStageIdUpdatingTemplate] = useState<string | null>(null);
+  const [templateUpdateError, setTemplateUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -184,6 +196,39 @@ export default function JobDetailPage() {
     };
   }, [job, jobId, orgSlug]);
 
+  // Fetch checklist templates for org (for stage template selector)
+  useEffect(() => {
+    if (!orgSlug || !job) return;
+    let cancelled = false;
+    setTemplatesLoading(true);
+    setTemplatesError(null);
+    fetch(`/api/checklist-templates?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json().then((data) => ({ res, data })))
+      .then(({ res, data }) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setTemplatesError(typeof data?.message === 'string' ? data.message : 'Failed to load templates');
+          return;
+        }
+        if (data?.ok && Array.isArray(data.templates)) {
+          setTemplates(data.templates.map((t: { id: string; name: string }) => ({ id: t.id, name: t.name })));
+        } else {
+          setTemplatesError('Failed to load templates');
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setTemplatesError(err instanceof Error ? err.message : 'Failed to load templates');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setTemplatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSlug, job]);
+
   async function refetchPhotos() {
     if (!orgSlug || !jobId) return;
     try {
@@ -233,6 +278,33 @@ export default function JobDetailPage() {
       setActiveStageError('Failed to set active stage');
     } finally {
       setStageIdSettingActive(null);
+    }
+  }
+
+  async function setStageTemplate(stageId: string, checklistTemplateId: string | null) {
+    setTemplateUpdateError(null);
+    setStageIdUpdatingTemplate(stageId);
+    try {
+      const res = await fetch(
+        `/api/stages/${stageId}?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checklistTemplateId }),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok && data?.stage) {
+        setStages((prev) =>
+          prev.map((s) => (s.id === stageId ? { ...s, ...data.stage } : s))
+        );
+      } else {
+        setTemplateUpdateError(typeof data?.message === 'string' ? data.message : 'Failed to update template');
+      }
+    } catch {
+      setTemplateUpdateError('Failed to update template');
+    } finally {
+      setStageIdUpdatingTemplate(null);
     }
   }
 
@@ -486,6 +558,11 @@ export default function JobDetailPage() {
                 {activeStageError}
               </div>
             )}
+            {(templateUpdateError || templatesError) && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                {templateUpdateError ?? templatesError}
+              </div>
+            )}
             {stages.length === 0 ? (
               <p className="text-gray-600">No stages yet.</p>
             ) : (
@@ -493,6 +570,8 @@ export default function JobDetailPage() {
                 {stages.map((stage) => {
                   const isActive = job?.active_stage_id === stage.id;
                   const isSetting = stageIdSettingActive === stage.id;
+                  const isUpdatingTemplate = stageIdUpdatingTemplate === stage.id;
+                  const selectorDisabled = templatesLoading || !!templatesError || isUpdatingTemplate;
                   return (
                     <li
                       key={stage.id}
@@ -523,6 +602,29 @@ export default function JobDetailPage() {
                           >
                             {isSetting ? 'Setting…' : 'Set as active'}
                           </button>
+                        )}
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <span className="text-sm text-gray-600">Template:</span>
+                        <select
+                          value={stage.checklist_template_id ?? ''}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setStageTemplate(stage.id, val ? val : null);
+                          }}
+                          disabled={selectorDisabled}
+                          className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent bg-white text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 max-w-full"
+                          aria-label={`Template for ${stage.name}`}
+                        >
+                          <option value="">None</option>
+                          {templates.map((t) => (
+                            <option key={t.id} value={t.id}>
+                              {t.name}
+                            </option>
+                          ))}
+                        </select>
+                        {isUpdatingTemplate && (
+                          <span className="text-xs text-gray-500">Saving…</span>
                         )}
                       </div>
                     </li>
