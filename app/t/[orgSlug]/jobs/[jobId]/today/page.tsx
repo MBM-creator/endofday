@@ -330,6 +330,17 @@ export default function TodaysWorkPage() {
               <span>{hasSavedNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
               <span>{eodSubmitted ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
             </div>
+            {(() => {
+              const w: string[] = [];
+              if (checklistTotal > 0 && checklistCompleted < checklistTotal) w.push('Checklist incomplete');
+              if (!hasSavedNote) w.push('No daily note');
+              if (!eodSubmitted) w.push('Awaiting end-of-day');
+              return w.length > 0 ? (
+                <div className="py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+                  {w.join(' · ')}
+                </div>
+              ) : null;
+            })()}
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Job brief</h2>
