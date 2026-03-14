@@ -52,6 +52,7 @@ type JobOverviewEntry = {
   checklistTotal: number;
   hasDailyNote: boolean;
   eodSubmittedToday: boolean;
+  activeStageLastUpdatedAt: string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
 
   const { data: stages, error: stagesError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, daily_note, checklist_templates(name, checklist_template_items(id))')
+    .select('id, job_id, name, daily_note, daily_note_updated_at, checklist_templates(name, checklist_template_items(id))')
     .in('job_id', jobIds)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -124,34 +125,39 @@ export async function GET(request: NextRequest) {
     .map((j: { active_stage_id?: string | null }) => j.active_stage_id)
     .filter((id: string | null | undefined): id is string => id != null && id !== '');
 
-  let completionsRows: { stage_id: string; checklist_template_item_id: string }[] = [];
+  let completionsRows: { stage_id: string; checklist_template_item_id: string; completed_at: string }[] = [];
   if (activeStageIds.length > 0) {
     const { data: compRows, error: compErr } = await supabaseAdmin
       .from('stage_checklist_completions')
-      .select('stage_id, checklist_template_item_id')
+      .select('stage_id, checklist_template_item_id, completed_at')
       .in('stage_id', activeStageIds);
     if (!compErr && compRows) {
       completionsRows = compRows.filter(
-        (r): r is { stage_id: string; checklist_template_item_id: string } =>
-          typeof r.stage_id === 'string' && typeof r.checklist_template_item_id === 'string'
+        (r): r is { stage_id: string; checklist_template_item_id: string; completed_at: string } =>
+          typeof r.stage_id === 'string' &&
+          typeof r.checklist_template_item_id === 'string' &&
+          typeof r.completed_at === 'string'
       );
     }
   }
 
   const todayUtc = new Date().toISOString().slice(0, 10);
-  let eodStageIds: Set<string> = new Set();
+  const eodSubmittedAtByStage = new Map<string, string>();
   if (activeStageIds.length > 0) {
     const { data: eodRows, error: eodErr } = await supabaseAdmin
       .from('stage_end_of_day')
-      .select('stage_id')
+      .select('stage_id, submitted_at')
       .in('stage_id', activeStageIds)
       .eq('report_date', todayUtc);
     if (!eodErr && eodRows) {
       for (const row of eodRows) {
-        if (typeof row.stage_id === 'string') eodStageIds.add(row.stage_id);
+        if (typeof row.stage_id === 'string' && typeof row.submitted_at === 'string') {
+          eodSubmittedAtByStage.set(row.stage_id, row.submitted_at);
+        }
       }
     }
   }
+  const eodStageIds = new Set(eodSubmittedAtByStage.keys());
 
   const stagesByJob = new Map<string, typeof stagesList[0][]>();
   for (const s of stagesList) {
@@ -185,6 +191,7 @@ export async function GET(request: NextRequest) {
         checklistTotal: 0,
         hasDailyNote: false,
         eodSubmittedToday: false,
+        activeStageLastUpdatedAt: null,
       };
     }
     const jobStages = stagesByJob.get(job.id) ?? [];
@@ -198,6 +205,7 @@ export async function GET(request: NextRequest) {
         checklistTotal: 0,
         hasDailyNote: false,
         eodSubmittedToday: false,
+        activeStageLastUpdatedAt: null,
       };
     }
     const activeTemplate = Array.isArray(activeStage.checklist_templates) ? activeStage.checklist_templates[0] : activeStage.checklist_templates;
@@ -206,6 +214,18 @@ export async function GET(request: NextRequest) {
     const checklistCompleted = completedCountByStage.get(activeStage.id) ?? 0;
     const hasDailyNote = ((activeStage.daily_note ?? '').trim() !== '');
     const eodSubmittedToday = eodStageIds.has(activeStage.id);
+    const itemIds = Array.isArray(items) ? items.map((i: { id?: string }) => i.id).filter((id): id is string => typeof id === 'string') : [];
+    const itemIdSet = new Set(itemIds);
+    const completionTimestamps = completionsRows
+      .filter((r) => r.stage_id === activeStage.id && itemIdSet.has(r.checklist_template_item_id) && typeof r.completed_at === 'string')
+      .map((r) => new Date(r.completed_at!).getTime())
+      .filter((t) => !Number.isNaN(t));
+    const dailyNoteTs = typeof activeStage.daily_note_updated_at === 'string' ? new Date(activeStage.daily_note_updated_at).getTime() : NaN;
+    const eodTs = eodSubmittedAtByStage.get(activeStage.id);
+    const eodTsNum = typeof eodTs === 'string' ? new Date(eodTs).getTime() : NaN;
+    const allTs = [...completionTimestamps, ...(Number.isNaN(dailyNoteTs) ? [] : [dailyNoteTs]), ...(Number.isNaN(eodTsNum) ? [] : [eodTsNum])];
+    const latestTs = allTs.length > 0 ? Math.max(...allTs) : NaN;
+    const activeStageLastUpdatedAt = Number.isNaN(latestTs) ? null : new Date(latestTs).toISOString();
     return {
       id: job.id,
       name: job.name,
@@ -214,6 +234,7 @@ export async function GET(request: NextRequest) {
       checklistTotal,
       hasDailyNote,
       eodSubmittedToday,
+      activeStageLastUpdatedAt,
     };
   });
 

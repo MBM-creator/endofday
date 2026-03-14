@@ -11,6 +11,7 @@ interface JobOverviewEntry {
   checklistTotal: number;
   hasDailyNote: boolean;
   eodSubmittedToday: boolean;
+  activeStageLastUpdatedAt?: string | null;
 }
 
 export default function OverviewPage() {
@@ -107,6 +108,15 @@ export default function OverviewPage() {
                       {w.join(' · ')}
                     </div>
                   ) : null;
+                })()}
+                {job.activeStageLastUpdatedAt && (() => {
+                  const d = new Date(job.activeStageLastUpdatedAt);
+                  if (Number.isNaN(d.getTime())) return null;
+                  return (
+                    <p className="mt-2 text-sm text-gray-500">
+                      Last updated {d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                    </p>
+                  );
                 })()}
               </li>
             ))}

@@ -284,6 +284,25 @@ export default function TodaysWorkPage() {
   const checklistCompleted = checklistItems.filter((item) => completions[item.id]).length;
   const hasSavedNote = ((activeStage?.daily_note ?? '').trim() !== '');
   const eodSubmitted = endOfDay.submitted;
+  const lastUpdatedAt = (() => {
+    const candidates: number[] = [];
+    if (typeof activeStage?.daily_note_updated_at === 'string') {
+      const t = new Date(activeStage.daily_note_updated_at).getTime();
+      if (!Number.isNaN(t)) candidates.push(t);
+    }
+    for (const iso of Object.values(completions)) {
+      if (typeof iso === 'string') {
+        const t = new Date(iso).getTime();
+        if (!Number.isNaN(t)) candidates.push(t);
+      }
+    }
+    if (eodSubmitted && typeof endOfDay.submittedAt === 'string') {
+      const t = new Date(endOfDay.submittedAt).getTime();
+      if (!Number.isNaN(t)) candidates.push(t);
+    }
+    if (candidates.length === 0) return null;
+    return new Date(Math.max(...candidates)).toISOString();
+  })();
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -340,6 +359,15 @@ export default function TodaysWorkPage() {
                   {w.join(' · ')}
                 </div>
               ) : null;
+            })()}
+            {lastUpdatedAt && (() => {
+              const d = new Date(lastUpdatedAt);
+              if (Number.isNaN(d.getTime())) return null;
+              return (
+                <p className="mt-2 text-sm text-gray-500">
+                  Last updated {d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+                </p>
+              );
             })()}
 
             <section>
