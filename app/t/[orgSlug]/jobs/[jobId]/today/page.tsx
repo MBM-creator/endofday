@@ -14,6 +14,7 @@ interface Job {
 }
 
 interface ChecklistTemplateItem {
+  id: string;
   item_type: string;
   label: string;
   sort_order: number;
@@ -49,19 +50,21 @@ export default function TodaysWorkPage() {
   const jobId = (params?.jobId as string) ?? '';
 
   const [job, setJob] = useState<Job | null>(null);
-  const [stages, setStages] = useState<Stage[]>([]);
+  const [activeStage, setActiveStage] = useState<Stage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [brief, setBrief] = useState<JobBrief | null>(null);
-  const [briefLoading, setBriefLoading] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
 
   const [photos, setPhotos] = useState<PreCommencementPhoto[]>([]);
-  const [photosLoading, setPhotosLoading] = useState(false);
   const [photosError, setPhotosError] = useState<string | null>(null);
 
-  // Resolve job and stages (required for active stage)
+  const [completions, setCompletions] = useState<Record<string, string>>({});
+  const [completionsError, setCompletionsError] = useState<string | null>(null);
+  const [togglingItemId, setTogglingItemId] = useState<string | null>(null);
+
+  // Single consolidated load for Today's Work data
   useEffect(() => {
     if (!orgSlug || !jobId) {
       setError('Job not found');
@@ -73,46 +76,50 @@ export default function TodaysWorkPage() {
     setLoading(true);
     setError(null);
     setJob(null);
-    setStages([]);
+    setActiveStage(null);
+    setBrief(null);
+    setPhotos([]);
+    setCompletions({});
+    setBriefError(null);
+    setPhotosError(null);
+    setCompletionsError(null);
 
-    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
-      .then(({ res, data }) => {
+      .then(({ res, data }: {
+        res: Response;
+        data: {
+          ok?: boolean;
+          job?: Job;
+          activeStage?: Stage | null;
+          brief?: JobBrief | null;
+          photos?: PreCommencementPhoto[];
+          completions?: Record<string, string>;
+          briefError?: string | null;
+          photosError?: string | null;
+          message?: string;
+        };
+      }) => {
         if (cancelled) return;
-        if (!res.ok) {
-          setError(typeof data?.message === 'string' ? data.message : 'Failed to load job');
+        if (!res.ok || !data?.ok) {
+          setError(typeof data?.message === 'string' ? data.message : 'Failed to load page');
           return;
         }
-        if (!data?.ok || !Array.isArray(data.jobs)) {
-          setError('Invalid response');
-          return;
-        }
-        const found = data.jobs.find((j: Job) => j.id === jobId);
-        if (!found) {
+        if (!data.job) {
           setError('Job not found');
           return;
         }
-        setJob(found);
-        return fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`);
-      })
-      .then((stagesRes) => {
-        if (cancelled || stagesRes === undefined) return undefined;
-        return stagesRes.json().then((stagesData: { ok?: boolean; stages?: Stage[]; message?: string }) => ({ stagesRes, stagesData }));
-      })
-      .then((next) => {
-        if (cancelled || next === undefined) return;
-        const { stagesRes, stagesData } = next;
-        if (!stagesRes.ok) {
-          setError(typeof stagesData?.message === 'string' ? stagesData.message : 'Failed to load stages');
-          return;
-        }
-        if (stagesData?.ok && Array.isArray(stagesData.stages)) {
-          setStages(stagesData.stages);
-        }
+        setJob(data.job);
+        setActiveStage(data.activeStage ?? null);
+        setBrief(data.brief ?? null);
+        setPhotos(Array.isArray(data.photos) ? data.photos : []);
+        setCompletions(typeof data.completions === 'object' && data.completions != null ? data.completions : {});
+        setBriefError(data.briefError ?? null);
+        setPhotosError(data.photosError ?? null);
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load job');
+          setError(err instanceof Error ? err.message : 'Failed to load page');
         }
       })
       .finally(() => {
@@ -124,60 +131,51 @@ export default function TodaysWorkPage() {
     };
   }, [orgSlug, jobId]);
 
-  // Fetch brief and photos when job is available (section-level errors only)
-  useEffect(() => {
-    if (!job || !orgSlug || !jobId) return;
-    let cancelled = false;
-
-    setBrief(null);
-    setPhotos([]);
-    setBriefError(null);
-    setPhotosError(null);
-    setBriefLoading(true);
-    setPhotosLoading(true);
-
-    const briefPromise = fetch(`/api/jobs/${jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`)
-      .then((res) => res.json())
-      .then((data: { ok?: boolean; brief?: JobBrief | null; message?: string }) => {
-        if (cancelled) return;
-        if (!data?.ok) {
-          setBriefError(typeof data?.message === 'string' ? data.message : 'Failed to load job brief');
-          return;
+  async function toggleCompletion(itemId: string, currentlyCompleted: boolean) {
+    if (!activeStage?.id || !orgSlug || togglingItemId) return;
+    setTogglingItemId(itemId);
+    const nextCompleted = !currentlyCompleted;
+    setCompletionsError(null);
+    setCompletions((prev) => {
+      const next = { ...prev };
+      if (nextCompleted) {
+        next[itemId] = new Date().toISOString();
+      } else {
+        delete next[itemId];
+      }
+      return next;
+    });
+    try {
+      const res = await fetch(
+        `/api/stages/${activeStage.id}/checklist-completions?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ checklistTemplateItemId: itemId, completed: nextCompleted }),
         }
-        setBrief(data.brief ?? null);
-      })
-      .catch((err) => {
-        if (!cancelled) setBriefError(err instanceof Error ? err.message : 'Failed to load job brief');
-      })
-      .finally(() => {
-        if (!cancelled) setBriefLoading(false);
+      );
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        setCompletions((prev) => {
+          const revert = { ...prev };
+          if (nextCompleted) delete revert[itemId];
+          else revert[itemId] = new Date().toISOString();
+          return revert;
+        });
+        setCompletionsError(typeof data?.message === 'string' ? data.message : 'Could not save');
+      }
+    } catch {
+      setCompletions((prev) => {
+        const revert = { ...prev };
+        if (nextCompleted) delete revert[itemId];
+        else revert[itemId] = new Date().toISOString();
+        return revert;
       });
-
-    const photosPromise = fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`)
-      .then((res) => res.json())
-      .then((data: { ok?: boolean; photos?: PreCommencementPhoto[]; message?: string }) => {
-        if (cancelled) return;
-        if (!data?.ok || !Array.isArray(data.photos)) {
-          setPhotosError(typeof data?.message === 'string' ? data.message : 'Failed to load photos');
-          return;
-        }
-        setPhotos(data.photos);
-      })
-      .catch((err) => {
-        if (!cancelled) setPhotosError(err instanceof Error ? err.message : 'Failed to load photos');
-      })
-      .finally(() => {
-        if (!cancelled) setPhotosLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [job, jobId, orgSlug]);
-
-  const activeStage = job && stages.length > 0
-    ? stages.find((s) => s.id === job.active_stage_id) ?? null
-    : null;
+      setCompletionsError('Could not save');
+    } finally {
+      setTogglingItemId(null);
+    }
+  }
 
   const hasActiveStage = !!activeStage;
 
@@ -221,13 +219,12 @@ export default function TodaysWorkPage() {
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Job brief</h2>
-              {briefLoading && <p className="text-gray-600 text-sm">Loading…</p>}
               {briefError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
                   {briefError}
                 </div>
               )}
-              {!briefLoading && !briefError && (
+              {!briefError && (
                 <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
                   {brief && brief.content !== null && brief.content !== '' ? (
                     <pre className="whitespace-pre-wrap font-sans text-gray-900 text-sm break-words">
@@ -242,13 +239,12 @@ export default function TodaysWorkPage() {
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Pre-commencement photos</h2>
-              {photosLoading && <p className="text-gray-600 text-sm">Loading…</p>}
               {photosError && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
                   {photosError}
                 </div>
               )}
-              {!photosLoading && !photosError && photos.length > 0 && (
+              {!photosError && photos.length > 0 && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {photos.map((photo) => (
                     <img
@@ -260,13 +256,18 @@ export default function TodaysWorkPage() {
                   ))}
                 </div>
               )}
-              {!photosLoading && !photosError && photos.length === 0 && (
+              {!photosError && photos.length === 0 && (
                 <p className="text-gray-500 text-sm">No photos yet.</p>
               )}
             </section>
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Checklist</h2>
+              {completionsError && (
+                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {completionsError}
+                </div>
+              )}
               {activeStage.checklist_templates?.checklist_template_items &&
               activeStage.checklist_templates.checklist_template_items.length > 0 ? (
                 (() => {
@@ -283,6 +284,7 @@ export default function TodaysWorkPage() {
                     { key: 'materials' as const, label: 'Materials', list: byType.materials },
                     { key: 'qc' as const, label: 'QC', list: byType.qc },
                   ];
+                  const checklistDisabled = !!togglingItemId;
                   return (
                     <div className="space-y-3 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
                       {groups.map(
@@ -290,9 +292,22 @@ export default function TodaysWorkPage() {
                           g.list.length > 0 && (
                             <div key={g.key}>
                               <span className="font-medium text-gray-700">{g.label}:</span>
-                              <ul className="mt-0.5 ml-3 list-disc text-gray-600 text-sm">
-                                {g.list.map((item, idx) => (
-                                  <li key={idx}>{item.label}</li>
+                              <ul className="mt-0.5 ml-3 list-none text-gray-600 text-sm space-y-1">
+                                {g.list.map((item) => (
+                                  <li key={item.id} className="flex items-center gap-2">
+                                    <input
+                                      type="checkbox"
+                                      id={`check-${item.id}`}
+                                      checked={!!completions[item.id]}
+                                      onChange={() => toggleCompletion(item.id, !!completions[item.id])}
+                                      disabled={checklistDisabled}
+                                      className="h-4 w-4 rounded border-gray-300 text-[#698F00] focus:ring-[#698F00] disabled:opacity-50"
+                                      aria-label={item.label}
+                                    />
+                                    <label htmlFor={`check-${item.id}`} className="flex-1 cursor-pointer">
+                                      {item.label}
+                                    </label>
+                                  </li>
                                 ))}
                               </ul>
                             </div>
