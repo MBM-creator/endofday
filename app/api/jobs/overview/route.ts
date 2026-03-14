@@ -164,7 +164,8 @@ export async function GET(request: NextRequest) {
   const completedCountByStage = new Map<string, number>();
   for (const stage of stagesList) {
     const stageId = stage.id;
-    const items = stage.checklist_templates?.checklist_template_items;
+    const template = Array.isArray(stage.checklist_templates) ? stage.checklist_templates[0] : stage.checklist_templates;
+    const items = template?.checklist_template_items;
     const itemIds = Array.isArray(items) ? items.map((i: { id?: string }) => i.id).filter((id): id is string => typeof id === 'string') : [];
     const itemIdSet = new Set(itemIds);
     const count = completionsRows.filter(
@@ -199,7 +200,8 @@ export async function GET(request: NextRequest) {
         eodSubmittedToday: false,
       };
     }
-    const items = activeStage.checklist_templates?.checklist_template_items;
+    const activeTemplate = Array.isArray(activeStage.checklist_templates) ? activeStage.checklist_templates[0] : activeStage.checklist_templates;
+    const items = activeTemplate?.checklist_template_items;
     const checklistTotal = Array.isArray(items) ? items.length : 0;
     const checklistCompleted = completedCountByStage.get(activeStage.id) ?? 0;
     const hasDailyNote = ((activeStage.daily_note ?? '').trim() !== '');
