@@ -56,7 +56,7 @@ type JobOverviewEntry = {
   blockerType?: string | null;
   labourHoursToday?: number | null;
   quotedLabourHours?: number | null;
-  actualLabourHoursTotal?: number | null;
+  actualLabourHoursTotal: number | null;
 };
 
 export async function GET(request: NextRequest) {
