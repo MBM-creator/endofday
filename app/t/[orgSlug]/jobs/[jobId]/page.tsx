@@ -437,8 +437,9 @@ export default function JobDetailPage() {
     if (!job || !orgSlug || !jobId || ccMappingSaving) return;
     setCcMappingError(null);
     setCcMappingSaving(true);
-    const selected =
-      ccSelectedProjectId && ccProjects.find((p) => p.project_id === ccSelectedProjectId);
+    const selected = ccSelectedProjectId
+      ? ccProjects.find((p) => p.project_id === ccSelectedProjectId)
+      : undefined;
     const body =
       selected == null
         ? {
