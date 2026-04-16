@@ -11,6 +11,10 @@ interface Job {
   site_id: string | null;
   created_at: string;
   active_stage_id?: string | null;
+  cc_project_id?: string | null;
+  cc_client_id?: string | null;
+  cc_project_title_snapshot?: string | null;
+  cc_client_name_snapshot?: string | null;
 }
 
 interface ChecklistTemplateItem {
@@ -425,6 +429,12 @@ export default function TodaysWorkPage() {
           <div className="space-y-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
+              {job.cc_project_title_snapshot && (
+                <p className="mt-1 text-sm text-gray-600">
+                  Client Connect: <span className="font-medium">{job.cc_project_title_snapshot}</span>
+                  {job.cc_client_name_snapshot ? ` — ${job.cc_client_name_snapshot}` : ''}
+                </p>
+              )}
               <p className="mt-1 text-lg font-medium text-[#698F00]">{activeStage.name}</p>
               <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
                 Today&apos;s stage

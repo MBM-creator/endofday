@@ -119,7 +119,7 @@ export default function OverviewPage() {
                         ? 'text-amber-800'
                         : 'text-gray-600'
                     : 'text-gray-600';
-                  const text = hasQuoted ? `Labour: ${actual} / ${quoted}h` : `Labour: ${actual}h`;
+                  const text = hasQuoted ? `Labour used: ${actual} / ${quoted}h` : `Labour used: ${actual}h`;
                   return (
                     <p className={`mt-2 text-sm ${colorClass}`}>
                       {text}

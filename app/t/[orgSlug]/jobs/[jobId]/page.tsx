@@ -11,6 +11,10 @@ interface Job {
   site_id: string | null;
   created_at: string;
   active_stage_id?: string | null;
+  cc_project_id?: string | null;
+  cc_client_id?: string | null;
+  cc_project_title_snapshot?: string | null;
+  cc_client_name_snapshot?: string | null;
 }
 
 interface ChecklistTemplateItem {
@@ -87,6 +91,22 @@ export default function JobDetailPage() {
     dailyNote: string | null;
     endOfDaySubmitted: boolean;
   } | null>(null);
+
+  interface CcProject {
+    project_id: string;
+    client_id: string;
+    project_title: string;
+    client_name: string;
+    site_address: string | null;
+    status: 'planning' | 'active';
+  }
+
+  const [ccProjects, setCcProjects] = useState<CcProject[]>([]);
+  const [ccProjectsLoading, setCcProjectsLoading] = useState(false);
+  const [ccProjectsError, setCcProjectsError] = useState<string | null>(null);
+  const [ccSelectedProjectId, setCcSelectedProjectId] = useState<string>('');
+  const [ccMappingSaving, setCcMappingSaving] = useState(false);
+  const [ccMappingError, setCcMappingError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -174,6 +194,40 @@ export default function JobDetailPage() {
       })
       .finally(() => {
         if (!cancelled) setPhotosLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [job, jobId, orgSlug]);
+
+  // Fetch Client Connect projects when job is available
+  useEffect(() => {
+    if (!job || !orgSlug || !jobId) return;
+    let cancelled = false;
+    setCcProjectsLoading(true);
+    setCcProjectsError(null);
+    setCcMappingError(null);
+    fetch('/api/cc/projects')
+      .then((res) => res.json().then((data) => ({ res, data })))
+      .then(({ res, data }: { res: Response; data: { ok?: boolean; projects?: CcProject[]; error?: string } }) => {
+        if (cancelled) return;
+        if (!res.ok || !data?.ok || !Array.isArray(data.projects)) {
+          setCcProjectsError(
+            typeof data?.error === 'string'
+              ? data.error
+              : 'Failed to load Client Connect projects'
+          );
+          return;
+        }
+        setCcProjects(data.projects);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setCcProjectsError(err instanceof Error ? err.message : 'Failed to load Client Connect projects');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCcProjectsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -378,6 +432,55 @@ export default function JobDetailPage() {
     }
   }
 
+  async function saveCcMapping(e: React.FormEvent) {
+    e.preventDefault();
+    if (!job || !orgSlug || !jobId || ccMappingSaving) return;
+    setCcMappingError(null);
+    setCcMappingSaving(true);
+    const selected =
+      ccSelectedProjectId && ccProjects.find((p) => p.project_id === ccSelectedProjectId);
+    const body =
+      selected == null
+        ? {
+            cc_project_id: null,
+            cc_client_id: null,
+            cc_project_title_snapshot: null,
+            cc_client_name_snapshot: null,
+          }
+        : {
+            cc_project_id: selected.project_id,
+            cc_client_id: selected.client_id,
+            cc_project_title_snapshot: selected.project_title,
+            cc_client_name_snapshot: selected.client_name,
+          };
+    try {
+      const res = await fetch(
+        `/api/jobs/${jobId}/cc-mapping?orgSlug=${encodeURIComponent(orgSlug)}`,
+        {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        }
+      );
+      const data = await res.json();
+      if (res.ok && data?.ok && data.job) {
+        setJob(data.job as Job);
+      } else {
+        setCcMappingError(
+          typeof data?.message === 'string'
+            ? data.message
+            : 'Failed to update Client Connect mapping'
+        );
+      }
+    } catch (err) {
+      setCcMappingError(
+        err instanceof Error ? err.message : 'Failed to update Client Connect mapping'
+      );
+    } finally {
+      setCcMappingSaving(false);
+    }
+  }
+
   function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
@@ -511,6 +614,60 @@ export default function JobDetailPage() {
                 Today&apos;s Work
               </Link>
             </div>
+
+            <section className="mb-6">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">Client Connect project</h2>
+              {ccProjectsLoading && (
+                <p className="text-sm text-gray-600">Loading Client Connect projects…</p>
+              )}
+              {!ccProjectsLoading && ccProjectsError && (
+                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                  {ccProjectsError}
+                </div>
+              )}
+              <form onSubmit={saveCcMapping} className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Linked project
+                  </label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white disabled:bg-gray-100"
+                    value={ccSelectedProjectId || job.cc_project_id || ''}
+                    onChange={(e) => setCcSelectedProjectId(e.target.value)}
+                    disabled={ccProjectsLoading || ccMappingSaving || !!ccProjectsError}
+                  >
+                    <option value="">Not linked</option>
+                    {ccProjects.map((project) => (
+                      <option key={project.project_id} value={project.project_id}>
+                        {project.project_title} — {project.client_name}
+                        {project.site_address ? ` — ${project.site_address}` : ''} ({project.status})
+                      </option>
+                    ))}
+                  </select>
+                  {job.cc_project_title_snapshot && (
+                    <p className="mt-1 text-xs text-gray-500">
+                      Currently linked to:{' '}
+                      <span className="font-medium">
+                        {job.cc_project_title_snapshot}
+                        {job.cc_client_name_snapshot ? ` — ${job.cc_client_name_snapshot}` : ''}
+                      </span>
+                    </p>
+                  )}
+                </div>
+                {ccMappingError && (
+                  <div className="mb-1 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
+                    {ccMappingError}
+                  </div>
+                )}
+                <button
+                  type="submit"
+                  disabled={ccProjectsLoading || ccMappingSaving || !!ccProjectsError}
+                  className="inline-flex items-center px-3 py-1.5 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                >
+                  {ccMappingSaving ? 'Saving…' : 'Save mapping'}
+                </button>
+              </form>
+            </section>
 
             {job.active_stage_id && activeStageStatus && (() => {
               const activeStage = stages.find((s) => s.id === job.active_stage_id);

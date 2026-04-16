@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { dailyReportPhotoStoragePath } from '@/lib/storage-paths';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -185,7 +186,7 @@ export async function POST(request: NextRequest) {
       catchup_plan: finishedPlanBool ? null : catchupPlan,
       site_left_clean_notes: siteLeftCleanBool ? 'Yes' : 'No',
     })
-    .select('id')
+    .select('id, submitted_at')
     .single();
 
   if (reportError || !report) {
@@ -204,7 +205,12 @@ export async function POST(request: NextRequest) {
   try {
     for (const fileName of fileNames) {
       const sourcePath = `drafts/${draftId}/${fileName}`;
-      const destPath = `${orgSlug}/${reportId}/${fileName}`;
+      const destPath = dailyReportPhotoStoragePath(
+        orgSlug,
+        siteNumber,
+        report.submitted_at,
+        fileName
+      );
 
       const { error: copyError } = await supabaseAdmin.storage
         .from(BUCKET)

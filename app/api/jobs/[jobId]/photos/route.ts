@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { jobPreCommencementStoragePath } from '@/lib/storage-paths';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -55,7 +56,7 @@ async function validateJobForOrg(
   jobId: string,
   orgSlug: string,
   requestId: string
-): Promise<{ ok: true } | NextResponse> {
+): Promise<{ ok: true; jobName: string } | NextResponse> {
   if (!jobId || !isValidUuid(jobId)) {
     return jsonError('Job not found', 404, requestId) as NextResponse;
   }
@@ -88,7 +89,7 @@ async function validateJobForOrg(
 
   const { data: job, error: jobError } = await supabaseAdmin
     .from('jobs')
-    .select('id')
+    .select('id, name')
     .eq('id', jobId)
     .eq('organisation_id', org.id)
     .single();
@@ -110,7 +111,7 @@ async function validateJobForOrg(
     return res;
   }
 
-  return { ok: true };
+  return { ok: true, jobName: job.name };
 }
 
 export async function GET(
@@ -167,6 +168,7 @@ export async function POST(
 
   const validation = await validateJobForOrg(jobId, orgSlug, requestId);
   if (validation instanceof NextResponse) return validation;
+  const { jobName } = validation;
 
   let formData: FormData;
   try {
@@ -199,7 +201,7 @@ export async function POST(
 
   const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
   const filename = `${randomUUID()}.${ext}`;
-  const storagePath = `jobs/${jobId}/pre-commencement/${filename}`;
+  const storagePath = jobPreCommencementStoragePath(jobId, jobName, filename);
 
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
