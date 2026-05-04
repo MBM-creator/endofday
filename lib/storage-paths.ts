@@ -3,7 +3,17 @@
  * Daily report folders use Australia/Sydney calendar date for grouping.
  */
 
+import { randomUUID } from 'crypto';
+
 const SITE_SLUG_MAX = 80;
+
+/**
+ * Object key suffix for uploaded photos. Browser `File` names are often unusable
+ * (e.g. "blob" with no real extension). Use `.jpg` keys and set `Content-Type` on upload.
+ */
+export function newImageStorageFileName(): string {
+  return `${randomUUID()}.jpg`;
+}
 
 /** Calendar date in Australia/Sydney (YYYY-MM-DD) for report filing day. */
 export function formatReportDate(submittedAt: Date | string): string {

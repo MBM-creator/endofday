@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { jobPreCommencementStoragePath } from '@/lib/storage-paths';
+import { jobPreCommencementStoragePath, newImageStorageFileName } from '@/lib/storage-paths';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -199,8 +199,7 @@ export async function POST(
     return jsonError(`Maximum ${MAX_PHOTOS} pre-commencement photos allowed per job`, 400, requestId);
   }
 
-  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const filename = `${randomUUID()}.${ext}`;
+  const filename = newImageStorageFileName();
   const storagePath = jobPreCommencementStoragePath(jobId, jobName, filename);
 
   const arrayBuffer = await file.arrayBuffer();

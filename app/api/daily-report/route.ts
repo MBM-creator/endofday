@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { dailyReportPhotoStoragePath } from '@/lib/storage-paths';
+import { dailyReportPhotoStoragePath, newImageStorageFileName } from '@/lib/storage-paths';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -251,8 +251,7 @@ export async function POST(request: NextRequest) {
     const uploadedPaths: string[] = [];
 
     for (const photo of photos) {
-      const fileExt = photo.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const fileName = `${randomUUID()}.${fileExt}`;
+      const fileName = newImageStorageFileName();
       const storagePath = dailyReportPhotoStoragePath(
         orgSlug,
         siteNumber,

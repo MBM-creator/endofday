@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "migrate-storage-paths": "tsx scripts/migrate-storage-paths.ts"
+    "migrate-storage-paths": "tsx scripts/migrate-storage-paths.ts",
+    "fix-blob-photo-extensions": "tsx scripts/fix-blob-photo-extensions.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.96.0",
