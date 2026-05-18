@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { guardStaffApi } from '@/lib/guard-staff-api';
+import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
+import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -61,6 +64,13 @@ export async function GET(
   if (!orgSlug) {
     return jsonError('orgSlug is required', 400, requestId);
   }
+
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
+
   if (!jobId || !isValidUuid(jobId)) {
     return jsonError('Job not found', 404, requestId);
   }
@@ -271,6 +281,33 @@ export async function GET(
     }
   }
 
+  let qaEodWarning: { message: string; activeRunId: string } | null = null;
+  try {
+    const { data: activeQa } = await supabaseAdmin
+      .from('paving_qa_runs')
+      .select('id')
+      .eq('job_id', jobId)
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle();
+
+    if (activeQa?.id) {
+      const bundle = await loadRunBundle(activeQa.id as string, jobId);
+      if (
+        bundle.ok &&
+        activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
+      ) {
+        qaEodWarning = {
+          activeRunId: activeQa.id as string,
+          message:
+            'An active paving QA run still has incomplete required evidence. You can submit end of day, but finish QA when possible.',
+        };
+      }
+    }
+  } catch (qaErr) {
+    console.warn('[api/jobs/[jobId]/today] QA warning skipped:', { requestId, qaErr });
+  }
+
   const body: {
     ok: true;
     job: typeof job;
@@ -284,6 +321,7 @@ export async function GET(
     actualLabourHoursTotal: number;
     briefError?: string | null;
     photosError?: string | null;
+    qaEodWarning?: { message: string; activeRunId: string } | null;
   } = {
     ok: true,
     job,
@@ -298,6 +336,7 @@ export async function GET(
   };
   if (briefError != null) body.briefError = briefError;
   if (photosError != null) body.photosError = photosError;
+  body.qaEodWarning = qaEodWarning;
 
   const res = NextResponse.json(body);
   res.headers.set('x-request-id', requestId);

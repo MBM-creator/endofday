@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { guardStaffApi } from '@/lib/guard-staff-api';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -128,6 +129,12 @@ export async function PATCH(
   const requestId = request.headers.get('x-vercel-id') ?? randomUUID().slice(0, 8);
   const { stageId } = await params;
   const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
+
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
 
   const validation = await validateStageForOrg(stageId, orgSlug, requestId);
   if (validation instanceof NextResponse) return validation;

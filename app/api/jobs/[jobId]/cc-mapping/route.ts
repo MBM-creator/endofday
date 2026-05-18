@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { guardStaffApi } from '@/lib/guard-staff-api';
 import { fetchCcProjects } from '@/lib/cc-client';
 
 export const runtime = 'nodejs';
@@ -138,6 +139,12 @@ export async function PATCH(
     randomUUID().slice(0, 8);
   const { jobId } = await params;
   const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
+
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
 
   const validation = await validateJobForOrg(jobId, orgSlug, requestId);
   if (validation instanceof NextResponse) return validation;

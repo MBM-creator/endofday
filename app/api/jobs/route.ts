@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { guardStaffApi } from '@/lib/guard-staff-api';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -53,6 +54,12 @@ export async function GET(request: NextRequest) {
   const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
   if (!orgSlug) {
     return jsonError('orgSlug is required', 400, requestId);
+  }
+
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
   }
 
   const { data: org, error: orgError } = await supabaseAdmin
@@ -116,6 +123,12 @@ export async function POST(request: NextRequest) {
   if (!orgSlug) return jsonError('orgSlug is required', 400, requestId);
   if (!name) return jsonError('name is required', 400, requestId);
   if (siteIdRaw && !isValidUuid(siteIdRaw)) return jsonError('siteId must be a valid UUID', 400, requestId);
+
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
 
   const { data: org, error: orgError } = await supabaseAdmin
     .from('organisations')

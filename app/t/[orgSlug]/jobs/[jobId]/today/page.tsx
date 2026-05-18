@@ -91,6 +91,7 @@ export default function TodaysWorkPage() {
   const [eodSaving, setEodSaving] = useState(false);
   const [eodError, setEodError] = useState<string | null>(null);
   const [endOfDayHistory, setEndOfDayHistory] = useState<EndOfDayHistoryEntry[]>([]);
+  const [qaEodWarning, setQaEodWarning] = useState<{ message: string; activeRunId: string } | null>(null);
 
   const [blockerType, setBlockerType] = useState('');
   const [blockerNote, setBlockerNote] = useState('');
@@ -130,6 +131,7 @@ export default function TodaysWorkPage() {
     setEodSummary('');
     setEodError(null);
     setEndOfDayHistory([]);
+    setQaEodWarning(null);
     setBlockerType('');
     setBlockerNote('');
     setBlockerError(null);
@@ -156,6 +158,7 @@ export default function TodaysWorkPage() {
           actualLabourHoursTotal?: number;
           briefError?: string | null;
           photosError?: string | null;
+          qaEodWarning?: { message: string; activeRunId: string } | null;
           message?: string;
         };
       }) => {
@@ -187,6 +190,11 @@ export default function TodaysWorkPage() {
         );
         setEodSummary(data.endOfDay?.summary ?? '');
         setEndOfDayHistory(Array.isArray(data.endOfDayHistory) ? data.endOfDayHistory : []);
+        setQaEodWarning(
+          data.qaEodWarning && typeof data.qaEodWarning.message === 'string' && data.qaEodWarning.activeRunId
+            ? { message: data.qaEodWarning.message, activeRunId: data.qaEodWarning.activeRunId }
+            : null
+        );
         setQuotedLabourHours(typeof data.quotedLabourHours === 'number' ? data.quotedLabourHours : (data.quotedLabourHours ?? null));
         setActualLabourHoursTotal(typeof data.actualLabourHoursTotal === 'number' ? data.actualLabourHoursTotal : 0);
       })
@@ -628,6 +636,20 @@ export default function TodaysWorkPage() {
                 )}
               </div>
             </section>
+
+            {qaEodWarning && (
+              <section className="mb-4">
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-950 text-sm">
+                  <p>{qaEodWarning.message}</p>
+                  <Link
+                    href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${qaEodWarning.activeRunId}`}
+                    className="mt-2 inline-block font-medium text-[#698F00] hover:underline"
+                  >
+                    Open paving QA run
+                  </Link>
+                </div>
+              </section>
+            )}
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-2">End of day</h2>

@@ -614,6 +614,12 @@ export default function JobDetailPage() {
               >
                 Today&apos;s Work
               </Link>
+              <Link
+                href={`/t/${orgSlug}/jobs/${jobId}/qa`}
+                className="mt-2 ml-4 inline-block text-sm font-medium text-[#698F00] hover:underline"
+              >
+                Paving QA
+              </Link>
             </div>
 
             <section className="mb-6">

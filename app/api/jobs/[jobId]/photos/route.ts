@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { validateJobForOrg, normalizeSupabaseError, isValidUuid } from '@/lib/job-org-validation';
+import { guardStaffApi } from '@/lib/guard-staff-api';
 import { jobPreCommencementStoragePath, newImageStorageFileName } from '@/lib/storage-paths';
 import { randomUUID } from 'crypto';
 
@@ -30,90 +32,6 @@ function serverError(
   return res;
 }
 
-function normalizeSupabaseError(err: unknown): {
-  code: string | null;
-  message: string;
-  details: string | null;
-  hint: string | null;
-} {
-  if (err === null || err === undefined) {
-    return { code: null, message: '', details: null, hint: null };
-  }
-  const o = err as Record<string, unknown>;
-  return {
-    code: typeof o.code === 'string' ? o.code : null,
-    message: typeof o.message === 'string' ? o.message : String(err),
-    details: typeof o.details === 'string' ? o.details : null,
-    hint: typeof o.hint === 'string' ? o.hint : null,
-  };
-}
-
-function isValidUuid(s: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
-}
-
-async function validateJobForOrg(
-  jobId: string,
-  orgSlug: string,
-  requestId: string
-): Promise<{ ok: true; jobName: string } | NextResponse> {
-  if (!jobId || !isValidUuid(jobId)) {
-    return jsonError('Job not found', 404, requestId) as NextResponse;
-  }
-  if (!orgSlug) {
-    return jsonError('orgSlug is required', 400, requestId) as NextResponse;
-  }
-
-  const { data: org, error: orgError } = await supabaseAdmin
-    .from('organisations')
-    .select('id')
-    .eq('slug', orgSlug)
-    .single();
-
-  if (orgError || !org) {
-    const supabaseErr = normalizeSupabaseError(orgError ?? null);
-    console.error('[api/jobs/[jobId]/photos] Org lookup failed:', { requestId, orgSlug, supabaseError: supabaseErr });
-    const res = NextResponse.json(
-      {
-        ok: false,
-        requestId,
-        message: process.env.NODE_ENV === 'development' && orgError
-          ? `Invalid organisation: ${orgError.message}`
-          : 'Invalid organisation',
-      },
-      { status: 404 }
-    );
-    res.headers.set('x-request-id', requestId);
-    return res;
-  }
-
-  const { data: job, error: jobError } = await supabaseAdmin
-    .from('jobs')
-    .select('id, name')
-    .eq('id', jobId)
-    .eq('organisation_id', org.id)
-    .single();
-
-  if (jobError || !job) {
-    const supabaseErr = normalizeSupabaseError(jobError ?? null);
-    console.error('[api/jobs/[jobId]/photos] Job lookup failed:', { requestId, jobId, supabaseError: supabaseErr });
-    const res = NextResponse.json(
-      {
-        ok: false,
-        requestId,
-        message: process.env.NODE_ENV === 'development' && jobError
-          ? `Job not found: ${jobError.message}`
-          : 'Job not found',
-      },
-      { status: 404 }
-    );
-    res.headers.set('x-request-id', requestId);
-    return res;
-  }
-
-  return { ok: true, jobName: job.name };
-}
-
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ jobId: string }> }
@@ -122,8 +40,17 @@ export async function GET(
   const { jobId } = await params;
   const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
 
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
+
   const validation = await validateJobForOrg(jobId, orgSlug, requestId);
-  if (validation instanceof NextResponse) return validation;
+  if (validation instanceof NextResponse) {
+    validation.headers.set('x-request-id', requestId);
+    return validation;
+  }
 
   const { data: photos, error: photosError } = await supabaseAdmin
     .from('job_pre_commencement_photos')
@@ -166,9 +93,18 @@ export async function POST(
   const { jobId } = await params;
   const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
 
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
+
   const validation = await validateJobForOrg(jobId, orgSlug, requestId);
-  if (validation instanceof NextResponse) return validation;
-  const { jobName } = validation;
+  if (validation instanceof NextResponse) {
+    validation.headers.set('x-request-id', requestId);
+    return validation;
+  }
+  const jobName = validation.job.name;
 
   let formData: FormData;
   try {
@@ -260,8 +196,17 @@ export async function DELETE(
     return jsonError('photoId is required and must be a valid UUID', 400, requestId);
   }
 
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
+
   const validation = await validateJobForOrg(jobId, orgSlug, requestId);
-  if (validation instanceof NextResponse) return validation;
+  if (validation instanceof NextResponse) {
+    validation.headers.set('x-request-id', requestId);
+    return validation;
+  }
 
   const { data: photo, error: photoError } = await supabaseAdmin
     .from('job_pre_commencement_photos')

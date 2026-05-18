@@ -68,3 +68,28 @@ export function jobPreCommencementStoragePath(
   const nameSlug = slugifyPathSegment(jobName);
   return `jobs/${nameSlug}__${short}/pre-commencement/${fileName}`;
 }
+
+/** Single stable segment for QA paths: slug + short job id (matches pre-commencement style). */
+export function jobSlugOrIdSegment(jobId: string, jobName: string): string {
+  const short = jobId.replace(/-/g, '').slice(0, 8);
+  const nameSlug = slugifyPathSegment(jobName);
+  return `${nameSlug}__${short}`;
+}
+
+/**
+ * Paving QA evidence photos — bucket `daily-reports`, QA-only prefix.
+ * jobs/{jobSlugOrId}/qa/{runId}/{sectionCode}/{itemKey}/{uuid}.jpg
+ */
+export function pavingQaPhotoStoragePath(
+  jobId: string,
+  jobName: string,
+  runId: string,
+  sectionCode: string,
+  itemKey: string,
+  fileName: string
+): string {
+  const seg = jobSlugOrIdSegment(jobId, jobName);
+  const sec = slugifyPathSegment(sectionCode, 64);
+  const item = slugifyPathSegment(itemKey, 64);
+  return `jobs/${seg}/qa/${runId}/${sec}/${item}/${fileName}`;
+}
