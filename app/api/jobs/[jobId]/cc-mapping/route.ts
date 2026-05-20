@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { fetchCcProjects } from '@/lib/cc-client';
+import { syncCcProjectStagesForJob } from '@/lib/sync-cc-project-stages';
 
 export const runtime = 'nodejs';
 
@@ -249,6 +250,26 @@ export async function PATCH(
     cc_client_id = match.client_id;
     cc_project_title_snapshot = match.project_title;
     cc_client_name_snapshot = match.client_name;
+    try {
+      await syncCcProjectStagesForJob(jobId, match, requestId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to sync Client Connect sections to stages';
+      console.error('[CC STAGE SYNC FAILED]', {
+        requestId,
+        projectId: cc_project_id,
+        error: message,
+      });
+      const res = NextResponse.json(
+        {
+          ok: false,
+          requestId,
+          message,
+        },
+        { status: 502 }
+      );
+      res.headers.set('x-request-id', requestId);
+      return res;
+    }
   } else {
     cc_client_id = null;
     cc_project_title_snapshot = cc_project_title_snapshot?.trim() || null;

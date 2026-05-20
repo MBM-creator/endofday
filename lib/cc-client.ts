@@ -28,6 +28,12 @@ export interface CcProjectVariation {
   href: string | null;
 }
 
+export interface CcProjectSection {
+  id: string;
+  name: string;
+  trade: CcProjectTrade | null;
+}
+
 export interface CcProject {
   project_id: string;
   quote_id: string | null;
@@ -37,6 +43,7 @@ export interface CcProject {
   site_address: string | null;
   status: CcProjectStatus;
   trades: CcProjectTrade[];
+  sections: CcProjectSection[];
   variations: CcProjectVariation[];
 }
 
@@ -152,6 +159,31 @@ function validateCcProjectVariations(payload: unknown): CcProjectVariation[] {
   });
 }
 
+function validateCcProjectSections(payload: unknown): CcProjectSection[] {
+  if (payload == null) return [];
+  if (!Array.isArray(payload)) {
+    throw new Error('Invalid Client Connect response: sections must be an array');
+  }
+
+  return payload.map((item) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error('Invalid Client Connect response: section must be an object');
+    }
+    const s = item as Record<string, unknown>;
+    if (!isUuid(s.id)) {
+      throw new Error('Invalid Client Connect response: section id must be a UUID');
+    }
+    if (typeof s.name !== 'string' || s.name.trim() === '') {
+      throw new Error('Invalid Client Connect response: section name must be a non-empty string');
+    }
+    return {
+      id: s.id,
+      name: s.name,
+      trade: optionalTrade(s.trade, 'section trade'),
+    };
+  });
+}
+
 function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
   if (!payload || typeof payload !== 'object') {
     throw new Error('Invalid Client Connect response: expected object');
@@ -217,6 +249,7 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
       site_address: site_address ?? null,
       status,
       trades,
+      sections: validateCcProjectSections(p.sections),
       variations: validateCcProjectVariations(p.variations),
     });
   }

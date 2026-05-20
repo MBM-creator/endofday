@@ -34,6 +34,10 @@ interface Stage {
   sort_order: number;
   created_at: string;
   checklist_template_id?: string | null;
+  cc_project_id?: string | null;
+  cc_section_id?: string | null;
+  cc_section_name_snapshot?: string | null;
+  cc_section_trade?: string | null;
   checklist_templates?: { name: string; checklist_template_items?: ChecklistTemplateItem[] } | null;
 }
 
@@ -904,6 +908,12 @@ export default function JobDetailPage() {
                         {isActive && (
                           <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
                             Active
+                          </span>
+                        )}
+                        {stage.cc_section_id && (
+                          <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                            Client Connect section
+                            {stage.cc_section_trade ? ` · ${stage.cc_section_trade.replace('_', ' ')}` : ''}
                           </span>
                         )}
                         {!isActive && (

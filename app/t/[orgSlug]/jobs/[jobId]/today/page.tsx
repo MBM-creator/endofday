@@ -34,6 +34,10 @@ interface Stage {
   sort_order: number;
   created_at: string;
   checklist_template_id?: string | null;
+  cc_project_id?: string | null;
+  cc_section_id?: string | null;
+  cc_section_name_snapshot?: string | null;
+  cc_section_trade?: string | null;
   daily_note?: string | null;
   daily_note_updated_at?: string | null;
   checklist_templates?: { name: string; checklist_template_items?: ChecklistTemplateItem[] } | null;
@@ -451,9 +455,17 @@ export default function TodaysWorkPage() {
                 emptyText="No Client Connect project linked."
               />
               <p className="mt-1 text-lg font-medium text-[#698F00]">{activeStage.name}</p>
-              <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
-                Today&apos;s stage
-              </span>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
+                  Today&apos;s stage
+                </span>
+                {activeStage.cc_section_id && (
+                  <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                    Client Connect section
+                    {activeStage.cc_section_trade ? ` · ${activeStage.cc_section_trade.replace('_', ' ')}` : ''}
+                  </span>
+                )}
+              </div>
             </div>
 
             {ccProject && (
