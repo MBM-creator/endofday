@@ -104,6 +104,8 @@ export default function AdminStaffPage() {
     }
   }
 
+  const activeAdminCount = staff.filter((s) => s.active && s.role === 'admin').length;
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
@@ -187,45 +189,51 @@ export default function AdminStaffPage() {
 
         {!loading && (
           <ul className="mt-6 space-y-3">
-            {staff.map((s) => (
-              <li
-                key={s.id}
-                className={`border rounded-lg p-4 bg-white text-sm ${s.active ? 'border-gray-200' : 'border-gray-300 opacity-75'}`}
-              >
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <p className="font-medium text-gray-900">{s.full_name}</p>
-                    <p className="text-gray-600">{s.email}</p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {s.role}
-                      {!s.active && ' · deactivated'}
-                    </p>
+            {staff.map((s) => {
+              const isLastActiveAdmin = s.active && s.role === 'admin' && activeAdminCount <= 1;
+
+              return (
+                <li
+                  key={s.id}
+                  className={`border rounded-lg p-4 bg-white text-sm ${s.active ? 'border-gray-200' : 'border-gray-300 opacity-75'}`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-medium text-gray-900">{s.full_name}</p>
+                      <p className="text-gray-600">{s.email}</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {s.role}
+                        {!s.active && ' · deactivated'}
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <select
+                        className="border border-gray-300 rounded px-2 py-1 text-xs"
+                        value={s.role}
+                        disabled={busyId === s.id || isLastActiveAdmin}
+                        onChange={(e) => patchStaff(s.id, { role: e.target.value as StaffRole })}
+                        title={isLastActiveAdmin ? 'Cannot change the last active admin' : undefined}
+                      >
+                        {ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {r}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        type="button"
+                        disabled={busyId === s.id || isLastActiveAdmin}
+                        className="px-2 py-1 text-xs border rounded hover:bg-gray-50"
+                        onClick={() => patchStaff(s.id, { active: !s.active })}
+                        title={isLastActiveAdmin ? 'Cannot deactivate the last active admin' : undefined}
+                      >
+                        {s.active ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap gap-2">
-                    <select
-                      className="border border-gray-300 rounded px-2 py-1 text-xs"
-                      value={s.role}
-                      disabled={busyId === s.id}
-                      onChange={(e) => patchStaff(s.id, { role: e.target.value as StaffRole })}
-                    >
-                      {ROLES.map((r) => (
-                        <option key={r} value={r}>
-                          {r}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      disabled={busyId === s.id}
-                      className="px-2 py-1 text-xs border rounded hover:bg-gray-50"
-                      onClick={() => patchStaff(s.id, { active: !s.active })}
-                    >
-                      {s.active ? 'Deactivate' : 'Activate'}
-                    </button>
-                  </div>
-                </div>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

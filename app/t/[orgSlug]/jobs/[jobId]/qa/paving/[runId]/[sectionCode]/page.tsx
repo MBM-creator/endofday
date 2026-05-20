@@ -20,6 +20,7 @@ export default function PavingQaSectionPage() {
   const [sectionStates, setSectionStates] = useState<
     { section: string; canSubmit: boolean; blockedBy: { section: string; reason: string }[] | null }[]
   >([]);
+  const [runStatus, setRunStatus] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,7 @@ export default function PavingQaSectionPage() {
         }
         const s = parseRunSetup(d.setup);
         setSetup(s);
+        setRunStatus(String(d.run?.status ?? ''));
         setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
         const subs = Array.isArray(d.submissions) ? d.submissions : [];
         const mine = subs.find((x: { section_code: string }) => x.section_code === sectionCode);
@@ -65,8 +67,10 @@ export default function PavingQaSectionPage() {
   }, [orgSlug, jobId, runId, sectionCode]);
 
   const myState = sectionStates.find((x) => x.section === sectionCode);
+  const isReadOnly = runStatus !== 'active';
 
   function setResult(key: string, result: string) {
+    if (isReadOnly) return;
     setAnswers((prev) => ({
       ...prev,
       [key]: { result, note: prev[key]?.note ?? '' },
@@ -74,6 +78,7 @@ export default function PavingQaSectionPage() {
   }
 
   function setNote(key: string, note: string) {
+    if (isReadOnly) return;
     setAnswers((prev) => ({
       ...prev,
       [key]: { result: prev[key]?.result ?? '', note },
@@ -81,6 +86,7 @@ export default function PavingQaSectionPage() {
   }
 
   function addFiles(key: string, files: FileList | null) {
+    if (isReadOnly) return;
     if (!files?.length) return;
     setPhotoFiles((prev) => ({
       ...prev,
@@ -90,6 +96,10 @@ export default function PavingQaSectionPage() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isReadOnly) {
+      setError('This run is complete, so section evidence is read-only.');
+      return;
+    }
     if (!myState?.canSubmit) {
       setError('This section is blocked until upstream work is cleared.');
       return;
@@ -153,6 +163,12 @@ export default function PavingQaSectionPage() {
         <h1 className="mt-2 text-xl font-bold text-gray-900">Section</h1>
         <p className="text-sm text-gray-600 font-mono">{sectionCode}</p>
 
+        {isReadOnly && (
+          <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm">
+            This run is {runStatus || 'not active'}, so section evidence is read-only.
+          </div>
+        )}
+
         {myState && !myState.canSubmit && myState.blockedBy && (
           <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
             {myState.blockedBy.map((b, i) => (
@@ -179,6 +195,7 @@ export default function PavingQaSectionPage() {
                       type="radio"
                       name={`r-${item.key}`}
                       checked={(answers[item.key]?.result ?? '') === r}
+                      disabled={isReadOnly}
                       onChange={() => setResult(item.key, r)}
                     />
                     {r}
@@ -192,6 +209,7 @@ export default function PavingQaSectionPage() {
                     className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
                     rows={2}
                     value={answers[item.key]?.note ?? ''}
+                    disabled={isReadOnly}
                     onChange={(e) => setNote(item.key, e.target.value)}
                   />
                 </div>
@@ -199,7 +217,13 @@ export default function PavingQaSectionPage() {
               {item.requirePhoto && (
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Photos</label>
-                  <input type="file" accept="image/*" multiple onChange={(e) => addFiles(item.key, e.target.files)} />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={isReadOnly}
+                    onChange={(e) => addFiles(item.key, e.target.files)}
+                  />
                   {(photoFiles[item.key]?.length ?? 0) > 0 && (
                     <p className="text-xs text-gray-500 mt-1">{photoFiles[item.key]!.length} new file(s)</p>
                   )}
@@ -209,7 +233,7 @@ export default function PavingQaSectionPage() {
           ))}
           <button
             type="submit"
-            disabled={saving || !myState?.canSubmit}
+            disabled={saving || isReadOnly || !myState?.canSubmit}
             className="w-full bg-[#698F00] text-white py-2 rounded-lg font-medium disabled:bg-gray-400"
           >
             {saving ? 'Saving…' : 'Submit section evidence'}
