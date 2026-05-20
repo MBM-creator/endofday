@@ -108,6 +108,8 @@ export default function JobDetailPage() {
   const [ccSelectedProjectId, setCcSelectedProjectId] = useState<string>('');
   const [ccMappingSaving, setCcMappingSaving] = useState(false);
   const [ccMappingError, setCcMappingError] = useState<string | null>(null);
+  const [manualCcProjectTitle, setManualCcProjectTitle] = useState('');
+  const [manualCcClientName, setManualCcClientName] = useState('');
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -140,6 +142,8 @@ export default function JobDetailPage() {
           return;
         }
         setJob(found);
+        setManualCcProjectTitle(found.cc_project_title_snapshot ?? '');
+        setManualCcClientName(found.cc_client_name_snapshot ?? '');
 
         return fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`);
       })
@@ -441,20 +445,34 @@ export default function JobDetailPage() {
     const selected = ccSelectedProjectId
       ? ccProjects.find((p) => p.project_id === ccSelectedProjectId)
       : undefined;
+    const manualTitle = manualCcProjectTitle.trim();
+    const manualClient = manualCcClientName.trim();
     const body =
-      selected == null
+      selected == null && !ccProjectsError
         ? {
             cc_project_id: null,
             cc_client_id: null,
             cc_project_title_snapshot: null,
             cc_client_name_snapshot: null,
           }
-        : {
+        : selected != null
+          ? {
             cc_project_id: selected.project_id,
             cc_client_id: selected.client_id,
             cc_project_title_snapshot: selected.project_title,
             cc_client_name_snapshot: selected.client_name,
+          }
+          : {
+            cc_project_id: null,
+            cc_client_id: null,
+            cc_project_title_snapshot: manualTitle || null,
+            cc_client_name_snapshot: manualClient || null,
           };
+    if (ccProjectsError && !manualTitle) {
+      setCcMappingSaving(false);
+      setCcMappingError('Project title is required while the Client Connect picker is unavailable.');
+      return;
+    }
     try {
       const res = await fetch(
         `/api/jobs/${jobId}/cc-mapping?orgSlug=${encodeURIComponent(orgSlug)}`,
@@ -466,7 +484,10 @@ export default function JobDetailPage() {
       );
       const data = await res.json();
       if (res.ok && data?.ok && data.job) {
-        setJob(data.job as Job);
+        const nextJob = data.job as Job;
+        setJob(nextJob);
+        setManualCcProjectTitle(nextJob.cc_project_title_snapshot ?? '');
+        setManualCcClientName(nextJob.cc_client_name_snapshot ?? '');
       } else {
         setCcMappingError(
           typeof data?.message === 'string'
@@ -644,7 +665,8 @@ export default function JobDetailPage() {
                 </div>
               )}
               <form onSubmit={saveCcMapping} className="space-y-2">
-                <div>
+                {!ccProjectsError ? (
+                  <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Linked project
                   </label>
@@ -667,7 +689,38 @@ export default function JobDetailPage() {
                       Select a different project to replace the saved link.
                     </p>
                   )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Pending Client Connect project
+                      </label>
+                      <input
+                        value={manualCcProjectTitle}
+                        onChange={(e) => setManualCcProjectTitle(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white disabled:bg-gray-100"
+                        placeholder="Project title"
+                        disabled={ccMappingSaving}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Client name
+                      </label>
+                      <input
+                        value={manualCcClientName}
+                        onChange={(e) => setManualCcClientName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white disabled:bg-gray-100"
+                        placeholder="Optional client name"
+                        disabled={ccMappingSaving}
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        This saves a visible pending link for QA/EOD until the Client Connect API is configured.
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {ccMappingError && (
                   <div className="mb-1 p-2 bg-red-50 border border-red-200 rounded text-xs text-red-800">
                     {ccMappingError}
@@ -675,10 +728,14 @@ export default function JobDetailPage() {
                 )}
                 <button
                   type="submit"
-                  disabled={ccProjectsLoading || ccMappingSaving || !!ccProjectsError}
+                  disabled={ccProjectsLoading || ccMappingSaving}
                   className="inline-flex items-center px-3 py-1.5 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                 >
-                  {ccMappingSaving ? 'Saving…' : 'Save mapping'}
+                  {ccMappingSaving
+                    ? 'Saving…'
+                    : ccProjectsError
+                      ? 'Save pending mapping'
+                      : 'Save mapping'}
                 </button>
               </form>
             </section>

@@ -251,8 +251,8 @@ export async function PATCH(
     cc_client_name_snapshot = match.client_name;
   } else {
     cc_client_id = null;
-    cc_project_title_snapshot = null;
-    cc_client_name_snapshot = null;
+    cc_project_title_snapshot = cc_project_title_snapshot?.trim() || null;
+    cc_client_name_snapshot = cc_client_name_snapshot?.trim() || null;
   }
 
   const { data: job, error: updateError } = await supabaseAdmin
@@ -286,4 +286,3 @@ export async function PATCH(
   res.headers.set('x-request-id', requestId);
   return res;
 }
-
