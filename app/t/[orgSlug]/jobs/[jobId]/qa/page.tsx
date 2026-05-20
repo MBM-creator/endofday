@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 
 interface RunRow {
   id: string;
@@ -10,11 +11,19 @@ interface RunRow {
   started_at: string;
 }
 
+interface JobContext {
+  cc_project_id?: string | null;
+  cc_client_id?: string | null;
+  cc_project_title_snapshot?: string | null;
+  cc_client_name_snapshot?: string | null;
+}
+
 export default function PavingQaHubPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
   const jobId = (params?.jobId as string) ?? '';
   const [runs, setRuns] = useState<RunRow[]>([]);
+  const [job, setJob] = useState<JobContext | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -30,6 +39,7 @@ export default function PavingQaHubPage() {
           return;
         }
         setRuns(Array.isArray(d.runs) ? d.runs : []);
+        setJob(d.job && typeof d.job === 'object' ? d.job : null);
         setError(null);
       })
       .catch(() => {
@@ -54,6 +64,14 @@ export default function PavingQaHubPage() {
           </Link>
           <h1 className="mt-2 text-2xl font-bold text-gray-900">Paving QA</h1>
           <p className="mt-1 text-sm text-gray-600">Evidence runs for this job.</p>
+          {job && (
+            <ClientConnectJobSummary
+              job={job}
+              compact
+              className="mt-1"
+              emptyText="No Client Connect project linked."
+            />
+          )}
         </div>
 
         {error && (

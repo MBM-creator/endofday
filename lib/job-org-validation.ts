@@ -28,7 +28,19 @@ export async function validateJobForOrg(
   orgSlug: string,
   requestId: string
 ): Promise<
-  | { ok: true; organisationId: string; job: { id: string; name: string; active_stage_id: string | null } }
+  | {
+      ok: true;
+      organisationId: string;
+      job: {
+        id: string;
+        name: string;
+        active_stage_id: string | null;
+        cc_project_id: string | null;
+        cc_client_id: string | null;
+        cc_project_title_snapshot: string | null;
+        cc_client_name_snapshot: string | null;
+      };
+    }
   | NextResponse
 > {
   if (!jobId || !isValidUuid(jobId)) {
@@ -60,7 +72,9 @@ export async function validateJobForOrg(
 
   const { data: job, error: jobError } = await supabaseAdmin
     .from('jobs')
-    .select('id, name, organisation_id, active_stage_id')
+    .select(
+      'id, name, organisation_id, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
+    )
     .eq('id', jobId)
     .eq('organisation_id', org.id)
     .single();
@@ -84,6 +98,10 @@ export async function validateJobForOrg(
       id: job.id as string,
       name: String(job.name),
       active_stage_id: (job.active_stage_id as string | null) ?? null,
+      cc_project_id: (job.cc_project_id as string | null) ?? null,
+      cc_client_id: (job.cc_client_id as string | null) ?? null,
+      cc_project_title_snapshot: (job.cc_project_title_snapshot as string | null) ?? null,
+      cc_client_name_snapshot: (job.cc_client_name_snapshot as string | null) ?? null,
     },
   };
 }

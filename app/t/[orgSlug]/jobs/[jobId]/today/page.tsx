@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 
 interface Job {
   id: string;
@@ -437,12 +438,12 @@ export default function TodaysWorkPage() {
           <div className="space-y-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
-              {job.cc_project_title_snapshot && (
-                <p className="mt-1 text-sm text-gray-600">
-                  Client Connect: <span className="font-medium">{job.cc_project_title_snapshot}</span>
-                  {job.cc_client_name_snapshot ? ` — ${job.cc_client_name_snapshot}` : ''}
-                </p>
-              )}
+              <ClientConnectJobSummary
+                job={job}
+                compact
+                className="mt-1"
+                emptyText="No Client Connect project linked."
+              />
               <p className="mt-1 text-lg font-medium text-[#698F00]">{activeStage.name}</p>
               <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
                 Today&apos;s stage

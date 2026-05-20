@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 
 interface Job {
   id: string;
@@ -624,12 +625,22 @@ export default function JobDetailPage() {
 
             <section className="mb-6">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">Client Connect project</h2>
+              <ClientConnectJobSummary
+                job={job}
+                className="mb-3"
+                emptyText="No Client Connect project linked yet."
+              />
               {ccProjectsLoading && (
                 <p className="text-sm text-gray-600">Loading Client Connect projects…</p>
               )}
               {!ccProjectsLoading && ccProjectsError && (
-                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {ccProjectsError}
+                <div className="mb-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-900 text-sm">
+                  Client Connect picker unavailable on this environment: {ccProjectsError}
+                  {job.cc_project_id && (
+                    <span className="block mt-1">
+                      The saved job link above is still stored on the job.
+                    </span>
+                  )}
                 </div>
               )}
               <form onSubmit={saveCcMapping} className="space-y-2">
@@ -651,13 +662,9 @@ export default function JobDetailPage() {
                       </option>
                     ))}
                   </select>
-                  {job.cc_project_title_snapshot && (
+                  {!ccProjectsError && job.cc_project_title_snapshot && (
                     <p className="mt-1 text-xs text-gray-500">
-                      Currently linked to:{' '}
-                      <span className="font-medium">
-                        {job.cc_project_title_snapshot}
-                        {job.cc_client_name_snapshot ? ` — ${job.cc_client_name_snapshot}` : ''}
-                      </span>
+                      Select a different project to replace the saved link.
                     </p>
                   )}
                 </div>

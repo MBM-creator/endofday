@@ -52,7 +52,7 @@ export async function GET(
     return serverError(requestId);
   }
 
-  const res = NextResponse.json({ ok: true, runs: rows ?? [] });
+  const res = NextResponse.json({ ok: true, job: v.job, runs: rows ?? [] });
   res.headers.set('x-request-id', requestId);
   return res;
 }

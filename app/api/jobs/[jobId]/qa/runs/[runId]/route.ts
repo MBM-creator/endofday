@@ -50,6 +50,7 @@ export async function GET(
 
   const res = NextResponse.json({
     ok: true,
+    job: v.job,
     run: bundle.run,
     setup: bundle.setup,
     sectionStates,

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { getSectionDef } from '@/lib/paving-qa-v1-catalog';
 import type { PavingSectionCode } from '@/lib/paving-qa-v1-types';
+import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 
 interface SectionState {
   section: PavingSectionCode;
@@ -17,6 +18,13 @@ interface SectionState {
   blockedBy: { section: string; reason: string }[] | null;
 }
 
+interface JobContext {
+  cc_project_id?: string | null;
+  cc_client_id?: string | null;
+  cc_project_title_snapshot?: string | null;
+  cc_client_name_snapshot?: string | null;
+}
+
 export default function PavingQaRunOverviewPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
@@ -24,6 +32,7 @@ export default function PavingQaRunOverviewPage() {
   const runId = (params?.runId as string) ?? '';
 
   const [sectionStates, setSectionStates] = useState<SectionState[]>([]);
+  const [job, setJob] = useState<JobContext | null>(null);
   const [runStatus, setRunStatus] = useState<string>('');
   const [finalAt, setFinalAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,6 +49,7 @@ export default function PavingQaRunOverviewPage() {
           setError(typeof d?.message === 'string' ? d.message : 'Failed to load');
           return;
         }
+        setJob(d.job && typeof d.job === 'object' ? d.job : null);
         setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
         setRunStatus(String(d.run?.status ?? ''));
         setFinalAt(d.run?.supervisor_final_approved_at ?? null);
@@ -64,6 +74,14 @@ export default function PavingQaRunOverviewPage() {
         </Link>
         <h1 className="mt-2 text-2xl font-bold text-gray-900">QA run</h1>
         <p className="text-sm text-gray-600 mt-1">Status: {runStatus || '…'}</p>
+        {job && (
+          <ClientConnectJobSummary
+            job={job}
+            compact
+            className="mt-1"
+            emptyText="No Client Connect project linked."
+          />
+        )}
         {finalAt && <p className="text-sm text-[#698F00] mt-1">Final approval recorded.</p>}
 
         <div className="mt-4 flex gap-3">
