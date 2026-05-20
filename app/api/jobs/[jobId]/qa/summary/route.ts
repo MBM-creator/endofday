@@ -8,12 +8,6 @@ import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
 
-function jsonError(message: string, status = 400, requestId?: string) {
-  const res = NextResponse.json({ ok: false, message }, { status });
-  if (requestId) res.headers.set('x-request-id', requestId);
-  return res;
-}
-
 function serverError(requestId: string, message = 'Internal server error') {
   const res = NextResponse.json({ ok: false, requestId, message }, { status: 500 });
   res.headers.set('x-request-id', requestId);

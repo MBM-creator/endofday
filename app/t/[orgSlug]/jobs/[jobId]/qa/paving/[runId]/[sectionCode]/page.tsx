@@ -20,9 +20,6 @@ export default function PavingQaSectionPage() {
   const [sectionStates, setSectionStates] = useState<
     { section: string; canSubmit: boolean; blockedBy: { section: string; reason: string }[] | null }[]
   >([]);
-  const [submissions, setSubmissions] = useState<{ section_code: string; answers: Answers; submission_status: string }[]>(
-    []
-  );
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +43,6 @@ export default function PavingQaSectionPage() {
         setSetup(s);
         setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
         const subs = Array.isArray(d.submissions) ? d.submissions : [];
-        setSubmissions(subs);
         const mine = subs.find((x: { section_code: string }) => x.section_code === sectionCode);
         if (mine?.answers && typeof mine.answers === 'object') {
           const next: Answers = {};

@@ -12,6 +12,7 @@ CREATE INDEX IF NOT EXISTS idx_daily_report_drafts_created_at ON daily_report_dr
 
 ALTER TABLE public.daily_report_drafts ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "service_role_all_daily_report_drafts" ON public.daily_report_drafts;
 CREATE POLICY "service_role_all_daily_report_drafts"
   ON public.daily_report_drafts FOR ALL
   TO service_role

@@ -55,11 +55,29 @@ BEGIN
 
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
+    WHERE conname = 'paving_qa_runs_started_by_fkey'
+  ) THEN
+    ALTER TABLE public.paving_qa_runs
+      ADD CONSTRAINT paving_qa_runs_started_by_fkey
+      FOREIGN KEY (started_by) REFERENCES public.staff_profiles(id) ON DELETE SET NULL;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
     WHERE conname = 'paving_qa_runs_supervisor_final_approved_by_fkey'
   ) THEN
     ALTER TABLE public.paving_qa_runs
       ADD CONSTRAINT paving_qa_runs_supervisor_final_approved_by_fkey
       FOREIGN KEY (supervisor_final_approved_by) REFERENCES public.staff_profiles(id) ON DELETE SET NULL;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'paving_qa_photos_uploaded_by_fkey'
+  ) THEN
+    ALTER TABLE public.paving_qa_photos
+      ADD CONSTRAINT paving_qa_photos_uploaded_by_fkey
+      FOREIGN KEY (uploaded_by) REFERENCES public.staff_profiles(id) ON DELETE SET NULL;
   END IF;
 
   IF NOT EXISTS (

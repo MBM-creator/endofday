@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 interface IssueRow {
   id: string;
@@ -28,14 +28,14 @@ export default function PavingQaSupervisorPage() {
   const [finalBusy, setFinalBusy] = useState(false);
   const [proceedReason, setProceedReason] = useState('');
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const res = await fetch(`/api/jobs/${jobId}/qa/runs/${runId}?orgSlug=${encodeURIComponent(orgSlug)}`);
     const d = await res.json();
     if (!res.ok || !d?.ok) throw new Error(d?.message ?? 'load');
     setIssues(Array.isArray(d.issues) ? d.issues : []);
     setRun({ status: d.run?.status, supervisor_final_approved_at: d.run?.supervisor_final_approved_at ?? null });
     setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
-  }
+  }, [jobId, orgSlug, runId]);
 
   useEffect(() => {
     if (!orgSlug || !jobId || !runId) return;
@@ -51,7 +51,7 @@ export default function PavingQaSupervisorPage() {
     return () => {
       cancelled = true;
     };
-  }, [orgSlug, jobId, runId]);
+  }, [orgSlug, jobId, runId, refresh]);
 
   async function act(issueId: string, action: string, reason?: string) {
     setBusyId(issueId);

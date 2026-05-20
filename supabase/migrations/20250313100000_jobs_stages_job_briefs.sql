@@ -44,18 +44,21 @@ ALTER TABLE public.jobs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.stages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.job_briefs ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "service_role_all_jobs" ON public.jobs;
 CREATE POLICY "service_role_all_jobs"
   ON public.jobs FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_all_stages" ON public.stages;
 CREATE POLICY "service_role_all_stages"
   ON public.stages FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_all_job_briefs" ON public.job_briefs;
 CREATE POLICY "service_role_all_job_briefs"
   ON public.job_briefs FOR ALL
   TO service_role

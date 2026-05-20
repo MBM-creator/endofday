@@ -126,6 +126,7 @@ export async function POST(
       setup,
       started_at: now,
       updated_at: now,
+      started_by: staffAuth.staff.id,
     })
     .select(
       'id, job_id, stage_id, status, setup, started_at, updated_at, completed_at, supervisor_final_approved_at'

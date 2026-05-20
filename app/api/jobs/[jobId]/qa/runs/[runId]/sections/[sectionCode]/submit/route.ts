@@ -251,6 +251,7 @@ export async function POST(
         item_key: itemKey,
         storage_path: storagePath,
         content_type: file.type || 'image/jpeg',
+        uploaded_by: staffAuth.staff.id,
       });
       if (phErr) {
         console.error('[qa/submit] photo row', { requestId, error: normalizeSupabaseError(phErr) });

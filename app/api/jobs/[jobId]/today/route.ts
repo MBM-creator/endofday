@@ -189,7 +189,7 @@ export async function GET(
     }
   }
 
-  let completions: Record<string, string> = {};
+  const completions: Record<string, string> = {};
   if (activeStage?.id) {
     const { data: completionRows, error: completionsErr } = await supabaseAdmin
       .from('stage_checklist_completions')

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { validateJobForOrg, normalizeSupabaseError, isValidUuid } from '@/lib/job-org-validation';
+import { validateJobForOrg, isValidUuid } from '@/lib/job-org-validation';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { loadRunBundle, computeRunSectionStates } from '@/lib/paving-qa-run-bundle';
 import { randomUUID } from 'crypto';
@@ -9,12 +9,6 @@ export const runtime = 'nodejs';
 function jsonError(message: string, status = 400, requestId?: string) {
   const res = NextResponse.json({ ok: false, message }, { status });
   if (requestId) res.headers.set('x-request-id', requestId);
-  return res;
-}
-
-function serverError(requestId: string, message = 'Internal server error') {
-  const res = NextResponse.json({ ok: false, requestId, message }, { status: 500 });
-  res.headers.set('x-request-id', requestId);
   return res;
 }
 

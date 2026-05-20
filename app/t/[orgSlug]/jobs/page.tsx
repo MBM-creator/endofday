@@ -21,14 +21,10 @@ export default function JobsListPage() {
 
   useEffect(() => {
     if (!orgSlug) {
-      setError('Organisation is required');
-      setLoading(false);
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -40,6 +36,7 @@ export default function JobsListPage() {
         }
         if (data?.ok && Array.isArray(data.jobs)) {
           setJobs(data.jobs);
+          setError(null);
         } else {
           setError('Invalid response');
         }

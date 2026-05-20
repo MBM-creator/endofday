@@ -21,7 +21,6 @@ export default function PavingQaHubPage() {
   useEffect(() => {
     if (!orgSlug || !jobId) return;
     let cancelled = false;
-    setLoading(true);
     fetch(`/api/jobs/${jobId}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((r) => r.json().then((d) => ({ r, d })))
       .then(({ r, d }) => {
