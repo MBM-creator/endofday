@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
+import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
+import type { CcProject } from '@/lib/cc-client';
 
 interface Job {
   id: string;
@@ -69,6 +71,7 @@ export default function TodaysWorkPage() {
   const jobId = (params?.jobId as string) ?? '';
 
   const [job, setJob] = useState<Job | null>(null);
+  const [ccProject, setCcProject] = useState<CcProject | null>(null);
   const [activeStage, setActiveStage] = useState<Stage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,6 +122,7 @@ export default function TodaysWorkPage() {
     setLoading(true);
     setError(null);
     setJob(null);
+    setCcProject(null);
     setActiveStage(null);
     setBrief(null);
     setPhotos([]);
@@ -149,6 +153,7 @@ export default function TodaysWorkPage() {
         data: {
           ok?: boolean;
           job?: Job;
+          ccProject?: CcProject | null;
           activeStage?: Stage | null;
           endOfDay?: EndOfDay;
           brief?: JobBrief | null;
@@ -173,6 +178,7 @@ export default function TodaysWorkPage() {
           return;
         }
         setJob(data.job);
+        setCcProject(data.ccProject ?? null);
         setActiveStage(data.activeStage ?? null);
         setBrief(data.brief ?? null);
         setPhotos(Array.isArray(data.photos) ? data.photos : []);
@@ -449,6 +455,10 @@ export default function TodaysWorkPage() {
                 Today&apos;s stage
               </span>
             </div>
+
+            {ccProject && (
+              <ClientConnectVariationsSummary variations={ccProject.variations} />
+            )}
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 bg-white/80 border border-gray-200 rounded-lg text-sm text-gray-600">
               <span>

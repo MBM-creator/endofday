@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
+import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -308,9 +309,12 @@ export async function GET(
     console.warn('[api/jobs/[jobId]/today] QA warning skipped:', { requestId, qaErr });
   }
 
+  const ccProject = await loadCcProjectForJob(job, requestId);
+
   const body: {
     ok: true;
     job: typeof job;
+    ccProject: Awaited<ReturnType<typeof loadCcProjectForJob>>;
     activeStage: typeof activeStage;
     endOfDay: typeof endOfDay;
     endOfDayHistory: EndOfDayHistoryEntry[];
@@ -325,6 +329,7 @@ export async function GET(
   } = {
     ok: true,
     job,
+    ccProject,
     activeStage,
     endOfDay,
     endOfDayHistory,

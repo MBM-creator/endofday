@@ -1,14 +1,43 @@
 import { randomUUID } from 'crypto';
 
 export type CcProjectStatus = 'planning' | 'active';
+export type CcProjectTrade =
+  | 'paving'
+  | 'concrete'
+  | 'carpentry_decking'
+  | 'irrigation'
+  | 'planting'
+  | 'electrical'
+  | 'other';
+
+export interface CcProjectVariation {
+  id: string;
+  variation_id: string;
+  quote_id: string | null;
+  number: number | null;
+  title: string | null;
+  status: string;
+  variation_status: string | null;
+  total_inc_gst: number | null;
+  accepted_at: string | null;
+  section_id: string | null;
+  section_name: string | null;
+  section_trade: CcProjectTrade | null;
+  team_signed_at: string | null;
+  client_signed_at: string | null;
+  href: string | null;
+}
 
 export interface CcProject {
   project_id: string;
+  quote_id: string | null;
   client_id: string;
   project_title: string;
   client_name: string;
   site_address: string | null;
   status: CcProjectStatus;
+  trades: CcProjectTrade[];
+  variations: CcProjectVariation[];
 }
 
 export interface CcProjectsResponseOk {
@@ -38,6 +67,91 @@ function isCcProjectStatus(value: unknown): value is CcProjectStatus {
   return value === 'planning' || value === 'active';
 }
 
+function isCcProjectTrade(value: unknown): value is CcProjectTrade {
+  return (
+    value === 'paving' ||
+    value === 'concrete' ||
+    value === 'carpentry_decking' ||
+    value === 'irrigation' ||
+    value === 'planting' ||
+    value === 'electrical' ||
+    value === 'other'
+  );
+}
+
+function optionalString(value: unknown, fieldName: string): string | null {
+  if (value == null) return null;
+  if (typeof value !== 'string') {
+    throw new Error(`Invalid Client Connect response: ${fieldName} must be string or null`);
+  }
+  return value;
+}
+
+function optionalUuid(value: unknown, fieldName: string): string | null {
+  if (value == null) return null;
+  if (!isUuid(value)) {
+    throw new Error(`Invalid Client Connect response: ${fieldName} must be a UUID or null`);
+  }
+  return value;
+}
+
+function optionalNumber(value: unknown, fieldName: string): number | null {
+  if (value == null) return null;
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Invalid Client Connect response: ${fieldName} must be a number or null`);
+  }
+  return value;
+}
+
+function optionalTrade(value: unknown, fieldName: string): CcProjectTrade | null {
+  if (value == null) return null;
+  if (!isCcProjectTrade(value)) {
+    throw new Error(`Invalid Client Connect response: ${fieldName} is not a supported trade`);
+  }
+  return value;
+}
+
+function validateCcProjectVariations(payload: unknown): CcProjectVariation[] {
+  if (payload == null) return [];
+  if (!Array.isArray(payload)) {
+    throw new Error('Invalid Client Connect response: variations must be an array');
+  }
+
+  return payload.map((item) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error('Invalid Client Connect response: variation must be an object');
+    }
+    const v = item as Record<string, unknown>;
+    if (!isUuid(v.id)) {
+      throw new Error('Invalid Client Connect response: variation id must be a UUID');
+    }
+    if (!isUuid(v.variation_id)) {
+      throw new Error('Invalid Client Connect response: variation_id must be a UUID');
+    }
+    if (typeof v.status !== 'string' || v.status.trim() === '') {
+      throw new Error('Invalid Client Connect response: variation status must be a non-empty string');
+    }
+
+    return {
+      id: v.id,
+      variation_id: v.variation_id,
+      quote_id: optionalUuid(v.quote_id, 'variation quote_id'),
+      number: optionalNumber(v.number, 'variation number'),
+      title: optionalString(v.title, 'variation title'),
+      status: v.status,
+      variation_status: optionalString(v.variation_status, 'variation_status'),
+      total_inc_gst: optionalNumber(v.total_inc_gst, 'variation total_inc_gst'),
+      accepted_at: optionalString(v.accepted_at, 'variation accepted_at'),
+      section_id: optionalUuid(v.section_id, 'variation section_id'),
+      section_name: optionalString(v.section_name, 'variation section_name'),
+      section_trade: optionalTrade(v.section_trade, 'variation section_trade'),
+      team_signed_at: optionalString(v.team_signed_at, 'variation team_signed_at'),
+      client_signed_at: optionalString(v.client_signed_at, 'variation client_signed_at'),
+      href: optionalString(v.href, 'variation href'),
+    };
+  });
+}
+
 function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
   if (!payload || typeof payload !== 'object') {
     throw new Error('Invalid Client Connect response: expected object');
@@ -57,14 +171,19 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
     }
     const p = item as Record<string, unknown>;
     const project_id = p.project_id;
+    const quote_id = p.quote_id;
     const client_id = p.client_id;
     const project_title = p.project_title;
     const client_name = p.client_name;
     const site_address = p.site_address;
     const status = p.status;
+    const tradesRaw = p.trades;
 
     if (!isUuid(project_id)) {
       throw new Error('Invalid Client Connect response: project_id must be a UUID');
+    }
+    if (quote_id != null && !isUuid(quote_id)) {
+      throw new Error('Invalid Client Connect response: quote_id must be a UUID or null');
     }
     if (!isUuid(client_id)) {
       throw new Error('Invalid Client Connect response: client_id must be a UUID');
@@ -81,14 +200,24 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
     if (!isCcProjectStatus(status)) {
       throw new Error('Invalid Client Connect response: status must be planning or active');
     }
+    if (tradesRaw != null && !Array.isArray(tradesRaw)) {
+      throw new Error('Invalid Client Connect response: trades must be an array');
+    }
+
+    const trades = Array.isArray(tradesRaw)
+      ? tradesRaw.filter((trade): trade is CcProjectTrade => isCcProjectTrade(trade))
+      : [];
 
     projects.push({
       project_id,
+      quote_id: quote_id ?? null,
       client_id,
       project_title,
       client_name,
       site_address: site_address ?? null,
       status,
+      trades,
+      variations: validateCcProjectVariations(p.variations),
     });
   }
 
@@ -168,4 +297,3 @@ export async function fetchCcProjects(requestId?: string): Promise<CcProject[]> 
   }
   throw new Error('Unknown error while fetching Client Connect projects');
 }
-

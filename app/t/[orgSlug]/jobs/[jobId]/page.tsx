@@ -4,6 +4,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
+import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
+import type { CcProject } from '@/lib/cc-client';
 
 interface Job {
   id: string;
@@ -92,15 +94,6 @@ export default function JobDetailPage() {
     dailyNote: string | null;
     endOfDaySubmitted: boolean;
   } | null>(null);
-
-  interface CcProject {
-    project_id: string;
-    client_id: string;
-    project_title: string;
-    client_name: string;
-    site_address: string | null;
-    status: 'planning' | 'active';
-  }
 
   const [ccProjects, setCcProjects] = useState<CcProject[]>([]);
   const [ccProjectsLoading, setCcProjectsLoading] = useState(false);
@@ -610,6 +603,11 @@ export default function JobDetailPage() {
     }
   }
 
+  const selectedCcProjectId = ccSelectedProjectId || job?.cc_project_id || '';
+  const selectedCcProject = selectedCcProjectId
+    ? ccProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
+    : null;
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -640,7 +638,7 @@ export default function JobDetailPage() {
                 href={`/t/${orgSlug}/jobs/${jobId}/qa`}
                 className="mt-2 ml-4 inline-block text-sm font-medium text-[#698F00] hover:underline"
               >
-                Paving QA
+                QA checks
               </Link>
             </div>
 
@@ -738,6 +736,28 @@ export default function JobDetailPage() {
                       : 'Save mapping'}
                 </button>
               </form>
+              {selectedCcProject && (
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">Project QA trades</p>
+                    {selectedCcProject.trades.length === 0 ? (
+                      <p className="mt-1 text-sm text-gray-500">No trades are set on this Client Connect project.</p>
+                    ) : (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {selectedCcProject.trades.map((trade) => (
+                          <span
+                            key={trade}
+                            className="inline-flex rounded-full border border-[#698F00]/30 bg-[#698F00]/5 px-2 py-1 text-xs font-medium text-[#5a7d00]"
+                          >
+                            {trade.replace('_', ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <ClientConnectVariationsSummary variations={selectedCcProject.variations} />
+                </div>
+              )}
             </section>
 
             {job.active_stage_id && activeStageStatus && (() => {

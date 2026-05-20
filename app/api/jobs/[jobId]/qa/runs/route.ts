@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { validateJobForOrg, validateStageBelongsToJob, normalizeSupabaseError } from '@/lib/job-org-validation';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { validateSetup } from '@/lib/paving-qa-v1-catalog';
+import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -52,7 +53,8 @@ export async function GET(
     return serverError(requestId);
   }
 
-  const res = NextResponse.json({ ok: true, job: v.job, runs: rows ?? [] });
+  const ccProject = await loadCcProjectForJob(v.job, requestId);
+  const res = NextResponse.json({ ok: true, job: v.job, ccProject, runs: rows ?? [] });
   res.headers.set('x-request-id', requestId);
   return res;
 }
