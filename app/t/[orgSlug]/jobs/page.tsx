@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 
 interface Job {
@@ -21,14 +22,10 @@ export default function JobsListPage() {
 
   useEffect(() => {
     if (!orgSlug) {
-      setError('Organisation is required');
-      setLoading(false);
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -40,6 +37,7 @@ export default function JobsListPage() {
         }
         if (data?.ok && Array.isArray(data.jobs)) {
           setJobs(data.jobs);
+          setError(null);
         } else {
           setError('Invalid response');
         }
@@ -70,7 +68,17 @@ export default function JobsListPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Jobs</h1>
+        <div className="mb-6 flex items-center justify-between gap-3">
+          <h1 className="text-2xl font-bold text-gray-900">Jobs</h1>
+          {orgSlug && (
+            <Link
+              href={`/t/${orgSlug}/jobs/new`}
+              className="rounded-lg bg-[#698F00] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a7d00]"
+            >
+              New job
+            </Link>
+          )}
+        </div>
 
         {error && (
           <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
@@ -83,22 +91,26 @@ export default function JobsListPage() {
         )}
 
         {!loading && !error && jobs.length === 0 && (
-          <p className="text-gray-600">No jobs yet.</p>
+          <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
+            No jobs yet.
+          </div>
         )}
 
         {!loading && !error && jobs.length > 0 && (
           <ul className="space-y-3">
             {jobs.map((job) => (
-              <li
-                key={job.id}
-                className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm"
-              >
-                <span className="font-medium text-gray-900">{job.name}</span>
-                {job.created_at && (
-                  <span className="ml-2 text-sm text-gray-500">
-                    {formatDate(job.created_at)}
-                  </span>
-                )}
+              <li key={job.id}>
+                <Link
+                  href={`/t/${orgSlug}/jobs/${job.id}`}
+                  className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-[#698F00] hover:shadow"
+                >
+                  <span className="font-medium text-gray-900">{job.name}</span>
+                  {job.created_at && (
+                    <span className="ml-2 text-sm text-gray-500">
+                      {formatDate(job.created_at)}
+                    </span>
+                  )}
+                </Link>
               </li>
             ))}
           </ul>

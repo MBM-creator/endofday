@@ -1,0 +1,34 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { randomUUID } from 'crypto';
+import { fetchCcProjects } from '@/lib/cc-client';
+
+export const runtime = 'nodejs';
+
+export async function GET(request: NextRequest) {
+  const requestId =
+    request.headers.get('x-request-id') ||
+    randomUUID().slice(0, 8);
+
+  try {
+    const projects = await fetchCcProjects(requestId);
+    const res = NextResponse.json({ ok: true, projects });
+    res.headers.set('x-request-id', requestId);
+    return res;
+  } catch (err) {
+    const error =
+      err instanceof Error && err.message
+        ? err.message
+        : 'Failed to load Client Connect projects';
+    const res = NextResponse.json(
+      {
+        ok: false,
+        requestId,
+        error,
+      },
+      { status: 502 }
+    );
+    res.headers.set('x-request-id', requestId);
+    return res;
+  }
+}
+

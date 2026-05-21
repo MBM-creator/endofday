@@ -28,14 +28,10 @@ export default function OverviewPage() {
 
   useEffect(() => {
     if (!orgSlug) {
-      setError('Organisation is required');
-      setLoading(false);
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     fetch(`/api/jobs/overview?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -47,6 +43,7 @@ export default function OverviewPage() {
         }
         if (data?.ok && Array.isArray(data.jobs)) {
           setJobs(data.jobs);
+          setError(null);
         } else {
           setError('Invalid response');
         }
@@ -119,7 +116,7 @@ export default function OverviewPage() {
                         ? 'text-amber-800'
                         : 'text-gray-600'
                     : 'text-gray-600';
-                  const text = hasQuoted ? `Labour: ${actual} / ${quoted}h` : `Labour: ${actual}h`;
+                  const text = hasQuoted ? `Labour used: ${actual} / ${quoted}h` : `Labour used: ${actual}h`;
                   return (
                     <p className={`mt-2 text-sm ${colorClass}`}>
                       {text}

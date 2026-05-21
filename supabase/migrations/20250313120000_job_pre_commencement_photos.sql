@@ -12,6 +12,7 @@ CREATE INDEX IF NOT EXISTS idx_job_pre_commencement_photos_job_id ON job_pre_com
 
 ALTER TABLE public.job_pre_commencement_photos ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "service_role_all_job_pre_commencement_photos" ON public.job_pre_commencement_photos;
 CREATE POLICY "service_role_all_job_pre_commencement_photos"
   ON public.job_pre_commencement_photos FOR ALL
   TO service_role

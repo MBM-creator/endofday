@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { guardStaffApi } from '@/lib/guard-staff-api';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -55,6 +56,12 @@ export async function GET(request: NextRequest) {
     return jsonError('orgSlug is required', 400, requestId);
   }
 
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
+
   const { data: org, error: orgError } = await supabaseAdmin
     .from('organisations')
     .select('id')
@@ -80,7 +87,9 @@ export async function GET(request: NextRequest) {
 
   const { data: jobs, error: jobsError } = await supabaseAdmin
     .from('jobs')
-    .select('id, organisation_id, name, site_id, created_at, active_stage_id')
+    .select(
+      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
+    )
     .eq('organisation_id', org.id)
     .order('created_at', { ascending: false });
 
@@ -114,6 +123,12 @@ export async function POST(request: NextRequest) {
   if (!orgSlug) return jsonError('orgSlug is required', 400, requestId);
   if (!name) return jsonError('name is required', 400, requestId);
   if (siteIdRaw && !isValidUuid(siteIdRaw)) return jsonError('siteId must be a valid UUID', 400, requestId);
+
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
 
   const { data: org, error: orgError } = await supabaseAdmin
     .from('organisations')

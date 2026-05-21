@@ -22,12 +22,14 @@ CREATE INDEX IF NOT EXISTS idx_checklist_template_items_template_id ON checklist
 ALTER TABLE public.checklist_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.checklist_template_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "service_role_all_checklist_templates" ON public.checklist_templates;
 CREATE POLICY "service_role_all_checklist_templates"
   ON public.checklist_templates FOR ALL
   TO service_role
   USING (true)
   WITH CHECK (true);
 
+DROP POLICY IF EXISTS "service_role_all_checklist_template_items" ON public.checklist_template_items;
 CREATE POLICY "service_role_all_checklist_template_items"
   ON public.checklist_template_items FOR ALL
   TO service_role

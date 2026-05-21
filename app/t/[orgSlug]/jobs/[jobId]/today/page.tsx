@@ -3,6 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
+import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
+import type { CcProject } from '@/lib/cc-client';
 
 interface Job {
   id: string;
@@ -11,6 +14,10 @@ interface Job {
   site_id: string | null;
   created_at: string;
   active_stage_id?: string | null;
+  cc_project_id?: string | null;
+  cc_client_id?: string | null;
+  cc_project_title_snapshot?: string | null;
+  cc_client_name_snapshot?: string | null;
 }
 
 interface ChecklistTemplateItem {
@@ -27,6 +34,10 @@ interface Stage {
   sort_order: number;
   created_at: string;
   checklist_template_id?: string | null;
+  cc_project_id?: string | null;
+  cc_section_id?: string | null;
+  cc_section_name_snapshot?: string | null;
+  cc_section_trade?: string | null;
   daily_note?: string | null;
   daily_note_updated_at?: string | null;
   checklist_templates?: { name: string; checklist_template_items?: ChecklistTemplateItem[] } | null;
@@ -64,6 +75,7 @@ export default function TodaysWorkPage() {
   const jobId = (params?.jobId as string) ?? '';
 
   const [job, setJob] = useState<Job | null>(null);
+  const [ccProject, setCcProject] = useState<CcProject | null>(null);
   const [activeStage, setActiveStage] = useState<Stage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +99,7 @@ export default function TodaysWorkPage() {
   const [eodSaving, setEodSaving] = useState(false);
   const [eodError, setEodError] = useState<string | null>(null);
   const [endOfDayHistory, setEndOfDayHistory] = useState<EndOfDayHistoryEntry[]>([]);
+  const [qaEodWarning, setQaEodWarning] = useState<{ message: string; activeRunId: string } | null>(null);
 
   const [blockerType, setBlockerType] = useState('');
   const [blockerNote, setBlockerNote] = useState('');
@@ -113,6 +126,7 @@ export default function TodaysWorkPage() {
     setLoading(true);
     setError(null);
     setJob(null);
+    setCcProject(null);
     setActiveStage(null);
     setBrief(null);
     setPhotos([]);
@@ -126,6 +140,7 @@ export default function TodaysWorkPage() {
     setEodSummary('');
     setEodError(null);
     setEndOfDayHistory([]);
+    setQaEodWarning(null);
     setBlockerType('');
     setBlockerNote('');
     setBlockerError(null);
@@ -142,6 +157,7 @@ export default function TodaysWorkPage() {
         data: {
           ok?: boolean;
           job?: Job;
+          ccProject?: CcProject | null;
           activeStage?: Stage | null;
           endOfDay?: EndOfDay;
           brief?: JobBrief | null;
@@ -152,6 +168,7 @@ export default function TodaysWorkPage() {
           actualLabourHoursTotal?: number;
           briefError?: string | null;
           photosError?: string | null;
+          qaEodWarning?: { message: string; activeRunId: string } | null;
           message?: string;
         };
       }) => {
@@ -165,6 +182,7 @@ export default function TodaysWorkPage() {
           return;
         }
         setJob(data.job);
+        setCcProject(data.ccProject ?? null);
         setActiveStage(data.activeStage ?? null);
         setBrief(data.brief ?? null);
         setPhotos(Array.isArray(data.photos) ? data.photos : []);
@@ -183,6 +201,11 @@ export default function TodaysWorkPage() {
         );
         setEodSummary(data.endOfDay?.summary ?? '');
         setEndOfDayHistory(Array.isArray(data.endOfDayHistory) ? data.endOfDayHistory : []);
+        setQaEodWarning(
+          data.qaEodWarning && typeof data.qaEodWarning.message === 'string' && data.qaEodWarning.activeRunId
+            ? { message: data.qaEodWarning.message, activeRunId: data.qaEodWarning.activeRunId }
+            : null
+        );
         setQuotedLabourHours(typeof data.quotedLabourHours === 'number' ? data.quotedLabourHours : (data.quotedLabourHours ?? null));
         setActualLabourHoursTotal(typeof data.actualLabourHoursTotal === 'number' ? data.actualLabourHoursTotal : 0);
       })
@@ -425,11 +448,29 @@ export default function TodaysWorkPage() {
           <div className="space-y-6">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
+              <ClientConnectJobSummary
+                job={job}
+                compact
+                className="mt-1"
+                emptyText="No Client Connect project linked."
+              />
               <p className="mt-1 text-lg font-medium text-[#698F00]">{activeStage.name}</p>
-              <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
-                Today&apos;s stage
-              </span>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
+                  Today&apos;s stage
+                </span>
+                {activeStage.cc_section_id && (
+                  <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                    Client Connect section
+                    {activeStage.cc_section_trade ? ` · ${activeStage.cc_section_trade.replace('_', ' ')}` : ''}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {ccProject && (
+              <ClientConnectVariationsSummary variations={ccProject.variations} />
+            )}
 
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 bg-white/80 border border-gray-200 rounded-lg text-sm text-gray-600">
               <span>
@@ -618,6 +659,20 @@ export default function TodaysWorkPage() {
                 )}
               </div>
             </section>
+
+            {qaEodWarning && (
+              <section className="mb-4">
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-950 text-sm">
+                  <p>{qaEodWarning.message}</p>
+                  <Link
+                    href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${qaEodWarning.activeRunId}`}
+                    className="mt-2 inline-block font-medium text-[#698F00] hover:underline"
+                  >
+                    Open paving QA run
+                  </Link>
+                </div>
+              </section>
+            )}
 
             <section>
               <h2 className="text-lg font-semibold text-gray-900 mb-2">End of day</h2>

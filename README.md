@@ -195,14 +195,29 @@ or
 
 Photos are stored in Supabase Storage bucket `daily-reports` with the following path structure:
 
+**Daily report photos (after submit):**
+
 ```
-{orgSlug}/{site_id}/{report_id}/{uuid}.{ext}
+{orgSlug}/{YYYY-MM-DD}/{slugified-site-identifier}/{uuid}.{ext}
 ```
 
+`YYYY-MM-DD` is the report’s `submitted_at` date in **Australia/Sydney**. `slugified-site-identifier` comes from the site number / name entered on the form.
+
 Example:
+
 ```
-madebymobbs/550e8400-e29b-41d4-a716-446655440000/660e8400-e29b-41d4-a716-446655440001/770e8400-e29b-41d4-a716-446655440002.jpg
+madebymobbs/2026-04-16/north-site-024/a1b2c3d4-e29b-41d4-a716-446655440000.jpg
 ```
+
+**Draft uploads** (temporary, before submit): `drafts/{draftId}/{uuid}.{ext}`
+
+**Pre-commencement job photos:**
+
+```
+jobs/{slugified-job-name}__{jobIdFirst8}/pre-commencement/{uuid}.{ext}
+```
+
+**Retroactive migration:** To move existing objects to these conventions (copy in Storage, update `storage_path`, remove old keys), run `npm run migrate-storage-paths -- --dry-run` first, then `npm run migrate-storage-paths` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set (e.g. in `.env.local`). If a row’s file is already gone from Storage (“Object not found”), the script counts it as `missing_source` and exits successfully; use `--delete-missing-rows` to drop those orphaned photo rows. See [`scripts/migrate-storage-paths.ts`](scripts/migrate-storage-paths.ts).
 
 ## Database Schema
 

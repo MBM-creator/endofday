@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { guardStaffApi } from '@/lib/guard-staff-api';
+import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
+import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
+import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -61,6 +65,13 @@ export async function GET(
   if (!orgSlug) {
     return jsonError('orgSlug is required', 400, requestId);
   }
+
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
+
   if (!jobId || !isValidUuid(jobId)) {
     return jsonError('Job not found', 404, requestId);
   }
@@ -90,7 +101,9 @@ export async function GET(
 
   const { data: job, error: jobError } = await supabaseAdmin
     .from('jobs')
-    .select('id, organisation_id, name, site_id, created_at, active_stage_id')
+    .select(
+      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
+    )
     .eq('id', jobId)
     .eq('organisation_id', org.id)
     .single();
@@ -114,7 +127,7 @@ export async function GET(
 
   const { data: stages, error: stagesError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, sort_order, created_at, checklist_template_id, daily_note, daily_note_updated_at, quoted_labour_hours, checklist_templates(name, checklist_template_items(id, item_type, label, sort_order))')
+    .select('id, job_id, name, sort_order, created_at, checklist_template_id, daily_note, daily_note_updated_at, quoted_labour_hours, cc_project_id, cc_section_id, cc_section_name_snapshot, cc_section_trade, checklist_templates(name, checklist_template_items(id, item_type, label, sort_order))')
     .eq('job_id', jobId)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -177,7 +190,7 @@ export async function GET(
     }
   }
 
-  let completions: Record<string, string> = {};
+  const completions: Record<string, string> = {};
   if (activeStage?.id) {
     const { data: completionRows, error: completionsErr } = await supabaseAdmin
       .from('stage_checklist_completions')
@@ -269,9 +282,39 @@ export async function GET(
     }
   }
 
+  let qaEodWarning: { message: string; activeRunId: string } | null = null;
+  try {
+    const { data: activeQa } = await supabaseAdmin
+      .from('paving_qa_runs')
+      .select('id')
+      .eq('job_id', jobId)
+      .eq('status', 'active')
+      .limit(1)
+      .maybeSingle();
+
+    if (activeQa?.id) {
+      const bundle = await loadRunBundle(activeQa.id as string, jobId);
+      if (
+        bundle.ok &&
+        activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
+      ) {
+        qaEodWarning = {
+          activeRunId: activeQa.id as string,
+          message:
+            'An active paving QA run still has incomplete required evidence. You can submit end of day, but finish QA when possible.',
+        };
+      }
+    }
+  } catch (qaErr) {
+    console.warn('[api/jobs/[jobId]/today] QA warning skipped:', { requestId, qaErr });
+  }
+
+  const ccProject = await loadCcProjectForJob(job, requestId);
+
   const body: {
     ok: true;
     job: typeof job;
+    ccProject: Awaited<ReturnType<typeof loadCcProjectForJob>>;
     activeStage: typeof activeStage;
     endOfDay: typeof endOfDay;
     endOfDayHistory: EndOfDayHistoryEntry[];
@@ -282,9 +325,11 @@ export async function GET(
     actualLabourHoursTotal: number;
     briefError?: string | null;
     photosError?: string | null;
+    qaEodWarning?: { message: string; activeRunId: string } | null;
   } = {
     ok: true,
     job,
+    ccProject,
     activeStage,
     endOfDay,
     endOfDayHistory,
@@ -296,6 +341,7 @@ export async function GET(
   };
   if (briefError != null) body.briefError = briefError;
   if (photosError != null) body.photosError = photosError;
+  body.qaEodWarning = qaEodWarning;
 
   const res = NextResponse.json(body);
   res.headers.set('x-request-id', requestId);

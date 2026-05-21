@@ -22,14 +22,10 @@ export default function ChecklistTemplatesListPage() {
 
   useEffect(() => {
     if (!orgSlug) {
-      setError('Organisation is required');
-      setLoading(false);
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
     fetch(`/api/checklist-templates?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
@@ -41,6 +37,7 @@ export default function ChecklistTemplatesListPage() {
         }
         if (data?.ok && Array.isArray(data.templates)) {
           setTemplates(data.templates);
+          setError(null);
         } else {
           setError('Invalid response');
         }

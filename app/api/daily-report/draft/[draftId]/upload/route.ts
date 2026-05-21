@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { newImageStorageFileName } from '@/lib/storage-paths';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -97,8 +98,7 @@ export async function POST(
     return jsonError(`Maximum ${MAX_PHOTOS} photos allowed`, 400, requestId);
   }
 
-  const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-  const filename = `${randomUUID()}.${ext}`;
+  const filename = newImageStorageFileName();
   const storagePath = `drafts/${draftId}/${filename}`;
 
   const arrayBuffer = await file.arrayBuffer();

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
+import { guardStaffApi } from '@/lib/guard-staff-api';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -129,6 +130,12 @@ export async function PATCH(
   const { stageId } = await params;
   const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
 
+  const staffAuth = await guardStaffApi(orgSlug);
+  if (staffAuth instanceof NextResponse) {
+    staffAuth.headers.set('x-request-id', requestId);
+    return staffAuth;
+  }
+
   const validation = await validateStageForOrg(stageId, orgSlug, requestId);
   if (validation instanceof NextResponse) return validation;
 
@@ -199,7 +206,7 @@ export async function PATCH(
 
   const { data: stage, error: fetchError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, sort_order, created_at, checklist_template_id, checklist_templates(name, checklist_template_items(id, item_type, label, sort_order))')
+    .select('id, job_id, name, sort_order, created_at, checklist_template_id, cc_project_id, cc_section_id, cc_section_name_snapshot, cc_section_trade, checklist_templates(name, checklist_template_items(id, item_type, label, sort_order))')
     .eq('id', stageId)
     .single();
 
