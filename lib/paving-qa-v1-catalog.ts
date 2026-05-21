@@ -5,7 +5,7 @@ import type {
   PavingInstallMethod,
 } from './paving-qa-v1-types';
 
-export type CatalogueItem = {
+export type BaseCatalogueItem = {
   key: string;
   label: string;
   /** If false, item must be pass or fail only */
@@ -17,10 +17,24 @@ export type CatalogueItem = {
   requireSupervisorOnFail: boolean;
 };
 
-export type CatalogueSection = {
-  code: PavingSectionCode;
+export type BaseCatalogueSection<SectionCode extends string> = {
+  code: SectionCode;
   title: string;
-  items: CatalogueItem[];
+  items: BaseCatalogueItem[];
+};
+
+export type CatalogueItem = BaseCatalogueItem;
+
+export type CatalogueSection = BaseCatalogueSection<PavingSectionCode>;
+
+export type QaChecklistCatalog<SectionCode extends string, Setup, Trade extends string = string> = {
+  id: string;
+  name: string;
+  version: 1;
+  trade: Trade;
+  sections: Array<BaseCatalogueSection<SectionCode>>;
+  allSectionCodes: () => SectionCode[];
+  applicableSectionCodes: (setup: Setup) => SectionCode[];
 };
 
 const SETUP_ITEMS: CatalogueItem[] = [
@@ -317,3 +331,13 @@ export function parseRunSetup(raw: unknown): PavingQaSetup | null {
   const v = validateSetup(raw);
   return v.ok ? v.setup : null;
 }
+
+export const PAVING_QA_V1_CATALOG: QaChecklistCatalog<PavingSectionCode, PavingQaSetup, 'paving'> = {
+  id: 'paving-qa-v1',
+  name: 'Paving QA',
+  version: 1,
+  trade: 'paving',
+  sections: SECTIONS,
+  allSectionCodes,
+  applicableSectionCodes,
+};

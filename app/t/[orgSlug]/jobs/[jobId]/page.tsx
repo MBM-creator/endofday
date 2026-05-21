@@ -62,6 +62,22 @@ interface JobBrief {
 
 const MAX_PHOTOS = 10;
 
+function normaliseMatchText(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function findSuggestedCcProject(job: Job, projects: CcProject[]): CcProject | null {
+  if (job.cc_project_id || projects.length === 0) return null;
+  const jobName = normaliseMatchText(job.name);
+  if (!jobName) return null;
+
+  return (
+    projects.find((project) => normaliseMatchText(project.project_title) === jobName) ??
+    projects.find((project) => normaliseMatchText(project.project_title).includes(jobName)) ??
+    null
+  );
+}
+
 export default function JobDetailPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
@@ -222,6 +238,10 @@ export default function JobDetailPage() {
           return;
         }
         setCcProjects(data.projects);
+        const suggestion = findSuggestedCcProject(job, data.projects);
+        if (suggestion) {
+          setCcSelectedProjectId(suggestion.project_id);
+        }
       })
       .catch((err) => {
         if (!cancelled) {
@@ -611,6 +631,10 @@ export default function JobDetailPage() {
   const selectedCcProject = selectedCcProjectId
     ? ccProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
     : null;
+  const connectedProjectTitle =
+    selectedCcProject?.project_title ?? job?.cc_project_title_snapshot ?? '';
+  const connectedClientName =
+    selectedCcProject?.client_name ?? job?.cc_client_name_snapshot ?? '';
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -675,7 +699,13 @@ export default function JobDetailPage() {
                   <select
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-white disabled:bg-gray-100"
                     value={ccSelectedProjectId || job.cc_project_id || ''}
-                    onChange={(e) => setCcSelectedProjectId(e.target.value)}
+                    onChange={(e) => {
+                      const nextProjectId = e.target.value;
+                      setCcSelectedProjectId(nextProjectId);
+                      const nextProject = ccProjects.find((project) => project.project_id === nextProjectId);
+                      setManualCcProjectTitle(nextProject?.project_title ?? '');
+                      setManualCcClientName(nextProject?.client_name ?? '');
+                    }}
                     disabled={ccProjectsLoading || ccMappingSaving || !!ccProjectsError}
                   >
                     <option value="">Not linked</option>
@@ -690,6 +720,30 @@ export default function JobDetailPage() {
                     <p className="mt-1 text-xs text-gray-500">
                       Select a different project to replace the saved link.
                     </p>
+                  )}
+                  {(connectedProjectTitle || connectedClientName) && (
+                    <div className="mt-3 grid gap-2">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Project name
+                        </label>
+                        <input
+                          value={connectedProjectTitle}
+                          readOnly
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Client name
+                        </label>
+                        <input
+                          value={connectedClientName}
+                          readOnly
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50"
+                        />
+                      </div>
+                    </div>
                   )}
                   </div>
                 ) : (
@@ -718,7 +772,7 @@ export default function JobDetailPage() {
                         disabled={ccMappingSaving}
                       />
                       <p className="mt-1 text-xs text-gray-500">
-                        This saves a visible pending link for QA/EOD until the Client Connect API is configured.
+                        Use this only when the picker cannot reach Client Connect. It stores the typed project and client names on this job as a pending link, so QA and end-of-day screens show the intended Client Connect project until the live API link can be saved.
                       </p>
                     </div>
                   </div>
