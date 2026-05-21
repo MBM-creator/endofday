@@ -85,13 +85,21 @@ export async function GET(request: NextRequest) {
     return res;
   }
 
-  const { data: jobs, error: jobsError } = await supabaseAdmin
+  const jobIdFilter = request.nextUrl.searchParams.get('jobId')?.trim() ?? '';
+
+  let query = supabaseAdmin
     .from('jobs')
     .select(
       'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
     )
     .eq('organisation_id', org.id)
     .order('created_at', { ascending: false });
+
+  if (jobIdFilter && isValidUuid(jobIdFilter)) {
+    query = query.eq('id', jobIdFilter);
+  }
+
+  const { data: jobs, error: jobsError } = await query;
 
   if (jobsError) {
     const supabaseErr = normalizeSupabaseError(jobsError);

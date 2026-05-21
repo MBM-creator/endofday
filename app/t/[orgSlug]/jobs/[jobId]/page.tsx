@@ -162,7 +162,7 @@ export default function JobDetailPage() {
     setJob(null);
     setStages([]);
 
-    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}&jobId=${encodeURIComponent(jobId)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
       .then(({ res, data }) => {
         if (cancelled) return;
@@ -174,7 +174,7 @@ export default function JobDetailPage() {
           setError('Invalid response');
           return;
         }
-        const found = data.jobs.find((j: Job) => j.id === jobId);
+        const found = data.jobs[0];
         if (!found) {
           setError('Job not found');
           return;
@@ -183,7 +183,7 @@ export default function JobDetailPage() {
         setManualCcProjectTitle(found.cc_project_title_snapshot ?? '');
         setManualCcClientName(found.cc_client_name_snapshot ?? '');
 
-        return fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`);
+        return fetch(`/api/stages?jobId=${encodeURIComponent(found.id)}`);
       })
       .then((stagesRes) => {
         if (cancelled || stagesRes === undefined) return undefined;
@@ -216,11 +216,11 @@ export default function JobDetailPage() {
 
   // Fetch pre-commencement photos when job is available
   useEffect(() => {
-    if (!job || !orgSlug || !jobId) return;
+    if (!job || !orgSlug) return;
     let cancelled = false;
     setPhotosLoading(true);
     setPhotosError(null);
-    fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs/${job.id}/photos?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json())
       .then((data: { ok?: boolean; photos?: PreCommencementPhoto[]; message?: string }) => {
         if (cancelled) return;
@@ -241,11 +241,11 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [job, jobId, orgSlug]);
+  }, [job, orgSlug]);
 
   // Fetch Client Connect projects when job is available
   useEffect(() => {
-    if (!job || !orgSlug || !jobId) return;
+    if (!job || !orgSlug) return;
     let cancelled = false;
     setCcProjectsLoading(true);
     setCcProjectsError(null);
@@ -279,15 +279,15 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [job, jobId, orgSlug]);
+  }, [job, orgSlug]);
 
   // Fetch job brief when job is available
   useEffect(() => {
-    if (!job || !orgSlug || !jobId) return;
+    if (!job || !orgSlug) return;
     let cancelled = false;
     setBriefLoading(true);
     setBriefError(null);
-    fetch(`/api/jobs/${jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs/${job.id}/brief?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json())
       .then((data: { ok?: boolean; brief?: JobBrief | null; message?: string }) => {
         if (cancelled) return;
@@ -308,7 +308,7 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [job, jobId, orgSlug]);
+  }, [job, orgSlug]);
 
   // Fetch checklist templates for org (for stage template selector)
   useEffect(() => {
@@ -344,12 +344,12 @@ export default function JobDetailPage() {
   }, [orgSlug, job]);
 
   useEffect(() => {
-    if (!job?.active_stage_id || !orgSlug || !jobId) {
+    if (!job?.active_stage_id || !job?.id || !orgSlug) {
       setActiveStageStatus(null);
       return;
     }
     let cancelled = false;
-    fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs/${job.id}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
       .then(({ res, data }: { res: Response; data: { ok?: boolean; activeStage?: { daily_note?: string | null }; completions?: Record<string, string>; endOfDay?: { submitted?: boolean }; message?: string } }) => {
         if (cancelled) return;
@@ -369,12 +369,12 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [job?.active_stage_id, jobId, orgSlug]);
+  }, [job?.active_stage_id, job?.id, orgSlug]);
 
   async function refetchPhotos() {
-    if (!orgSlug || !jobId) return;
+    if (!orgSlug || !job?.id) return;
     try {
-      const res = await fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`);
+      const res = await fetch(`/api/jobs/${job.id}/photos?orgSlug=${encodeURIComponent(orgSlug)}`);
       const data = await res.json();
       if (res.ok && data?.ok && Array.isArray(data.photos)) {
         setPhotos(data.photos);
@@ -386,9 +386,9 @@ export default function JobDetailPage() {
   }
 
   async function refetchStages() {
-    if (!jobId) return;
+    if (!job?.id) return;
     try {
-      const res = await fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`);
+      const res = await fetch(`/api/stages?jobId=${encodeURIComponent(job.id)}`);
       const data = await res.json();
       if (res.ok && data?.ok && Array.isArray(data.stages)) {
         setStages(data.stages);
@@ -403,7 +403,7 @@ export default function JobDetailPage() {
     setStageIdSettingActive(stageId);
     try {
       const res = await fetch(
-        `/api/jobs/${jobId}?orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/jobs/${job?.id ?? jobId}?orgSlug=${encodeURIComponent(orgSlug)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -517,7 +517,7 @@ export default function JobDetailPage() {
     }
     try {
       const res = await fetch(
-        `/api/jobs/${jobId}/cc-mapping?orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/jobs/${job?.id ?? jobId}/cc-mapping?orgSlug=${encodeURIComponent(orgSlug)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -568,7 +568,7 @@ export default function JobDetailPage() {
         const formData = new FormData();
         formData.append('file', file);
         try {
-          const res = await fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`, {
+          const res = await fetch(`/api/jobs/${job?.id ?? jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`, {
             method: 'POST',
             body: formData,
           });
@@ -594,7 +594,7 @@ export default function JobDetailPage() {
     setPhotoIdRemoving(photo.id);
     try {
       const res = await fetch(
-        `/api/jobs/${jobId}/photos?photoId=${encodeURIComponent(photo.id)}&orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/jobs/${job?.id ?? jobId}/photos?photoId=${encodeURIComponent(photo.id)}&orgSlug=${encodeURIComponent(orgSlug)}`,
         { method: 'DELETE' }
       );
       const data = await res.json();
@@ -624,7 +624,7 @@ export default function JobDetailPage() {
     setBriefError(null);
     setIsSavingBrief(true);
     try {
-      const res = await fetch(`/api/jobs/${jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`, {
+      const res = await fetch(`/api/jobs/${job?.id ?? jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editContent }),
