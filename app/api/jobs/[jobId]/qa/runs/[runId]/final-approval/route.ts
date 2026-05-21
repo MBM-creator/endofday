@@ -4,6 +4,7 @@ import { validateJobForOrg, normalizeSupabaseError, isValidUuid } from '@/lib/jo
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
+import { computeV2SectionUiStates } from '@/lib/paving-qa-v2-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -74,7 +75,34 @@ export async function POST(
     return jsonError('Run not found', 404, requestId);
   }
 
-  if (activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)) {
+  if (bundle.version === 2) {
+    const sectionStates = computeV2SectionUiStates(
+      bundle.setup,
+      bundle.submissions,
+      bundle.photoRows,
+      bundle.issues
+    );
+    const incompleteSections = sectionStates.filter((s) => !s.cleared);
+    if (incompleteSections.length > 0) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          message: 'Paving QA v2 cannot be final-approved until all applicable sections are cleared.',
+          incompleteSections: incompleteSections.map((s) => ({
+            code: s.code,
+            title: s.title,
+            status: s.status,
+          })),
+        },
+        { status: 409 }
+      );
+      res.headers.set('x-request-id', requestId);
+      return res;
+    }
+    // All v2 sections cleared — fall through to the shared approval write path below.
+  }
+
+  if (bundle.version !== 2 && activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)) {
     return jsonError('Not all sections are cleared; complete QA evidence first', 409, requestId);
   }
 

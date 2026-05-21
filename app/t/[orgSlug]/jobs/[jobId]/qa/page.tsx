@@ -27,7 +27,7 @@ export default function PavingQaHubPage() {
   const [job, setJob] = useState<JobContext | null>(null);
   const [ccProject, setCcProject] = useState<CcProject | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [runsError, setRunsError] = useState(false);
 
   useEffect(() => {
     if (!orgSlug || !jobId) return;
@@ -37,16 +37,15 @@ export default function PavingQaHubPage() {
       .then(({ r, d }) => {
         if (cancelled) return;
         if (!r.ok) {
-          setError(typeof d?.message === 'string' ? d.message : 'Failed to load');
+          setRunsError(true);
           return;
         }
         setRuns(Array.isArray(d.runs) ? d.runs : []);
         setJob(d.job && typeof d.job === 'object' ? d.job : null);
         setCcProject(d.ccProject && typeof d.ccProject === 'object' ? d.ccProject : null);
-        setError(null);
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load');
+        if (!cancelled) setRunsError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -60,6 +59,8 @@ export default function PavingQaHubPage() {
   const linkedToRealCcProject = Boolean(job?.cc_project_id);
   const applicableTrades = new Set(ccProject?.trades ?? []);
   const hasCcTradeData = Boolean(ccProject);
+  // Show paving QA for any job that is not explicitly linked to a CC project
+  // that excludes paving. When runsError, job is null → not linked → always show.
   const pavingApplicable = !linkedToRealCcProject || applicableTrades.has('paving');
   const irrigationApplicable = applicableTrades.has('irrigation');
   const hasExistingPavingRuns = runs.length > 0;
@@ -83,14 +84,17 @@ export default function PavingQaHubPage() {
           )}
         </div>
 
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{error}</div>
-        )}
         {loading && <p className="text-gray-600">Loading…</p>}
 
-        {!loading && !error && (
+        {!loading && (
           <div className="space-y-4">
-            {linkedToRealCcProject && !hasCcTradeData && (
+            {runsError && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-950">
+                Client Connect project data is unavailable. Local QA checks can still be used.
+              </div>
+            )}
+
+            {!runsError && linkedToRealCcProject && !hasCcTradeData && (
               <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-950">
                 Client Connect project details are unavailable, so QA filtering cannot be confirmed.
               </div>
@@ -108,21 +112,22 @@ export default function PavingQaHubPage() {
                           Evidence run for paving works, base preparation, set-out, surface and supervisor sign-off.
                         </p>
                       </div>
-                      <Link
-                        href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/new`}
-                        className={`inline-block py-2 px-4 rounded-lg font-medium text-white transition-colors ${
-                          active ? 'bg-gray-400 cursor-not-allowed pointer-events-none' : 'bg-[#698F00] hover:bg-[#5a7d00]'
-                        }`}
-                        aria-disabled={!!active}
-                      >
-                        Start
-                      </Link>
+                      {active ? (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${active.id}`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Open active Paving QA run →
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/new`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Start Paving QA
+                        </Link>
+                      )}
                     </div>
-                    {active && (
-                      <p className="mt-2 text-xs text-gray-500">
-                        Complete or cancel the active paving run before starting another.
-                      </p>
-                    )}
                   </div>
                 )}
 
@@ -153,18 +158,6 @@ export default function PavingQaHubPage() {
                 )}
               </div>
             </section>
-
-            {active && (
-              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <p className="text-sm font-medium text-gray-900">Active paving run</p>
-                <Link
-                  href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${active.id}`}
-                  className="mt-2 inline-block text-[#698F00] font-medium hover:underline"
-                >
-                  Open run →
-                </Link>
-              </div>
-            )}
 
             {hasExistingPavingRuns && (
               <section className="mt-8">

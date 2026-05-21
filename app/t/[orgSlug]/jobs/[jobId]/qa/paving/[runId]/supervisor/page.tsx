@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
+import { getV2SectionDefinition, isV2SectionCode, type PavingSectionCodeV2 } from '@/lib/paving-qa-v2-catalog';
 
 interface IssueRow {
   id: string;
@@ -15,6 +16,13 @@ interface IssueRow {
 
 type StaffRole = 'field' | 'supervisor' | 'admin';
 
+function getSectionLabel(sectionCode: string, setupVersion: number | null): string {
+  if (setupVersion === 2 && isV2SectionCode(sectionCode)) {
+    return getV2SectionDefinition(sectionCode as PavingSectionCodeV2)?.title ?? sectionCode;
+  }
+  return sectionCode;
+}
+
 export default function PavingQaSupervisorPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
@@ -24,6 +32,8 @@ export default function PavingQaSupervisorPage() {
   const [issues, setIssues] = useState<IssueRow[]>([]);
   const [run, setRun] = useState<{ status: string; supervisor_final_approved_at: string | null } | null>(null);
   const [sectionStates, setSectionStates] = useState<{ section: string; cleared: boolean }[]>([]);
+  const [setupVersion, setSetupVersion] = useState<number | null>(null);
+  const [photoRows, setPhotoRows] = useState<{ section_code: string; item_key: string }[]>([]);
   const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -45,6 +55,8 @@ export default function PavingQaSupervisorPage() {
     setIssues(Array.isArray(d.issues) ? d.issues : []);
     setRun({ status: d.run?.status, supervisor_final_approved_at: d.run?.supervisor_final_approved_at ?? null });
     setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
+    setSetupVersion(typeof d.setupVersion === 'number' ? d.setupVersion : null);
+    setPhotoRows(Array.isArray(d.photoRows) ? d.photoRows : []);
   }, [jobId, orgSlug, runId]);
 
   useEffect(() => {
@@ -139,12 +151,33 @@ export default function PavingQaSupervisorPage() {
             <h2 className="mt-8 text-lg font-semibold text-gray-900">Open issues</h2>
             <ul className="mt-2 space-y-3">
               {openIssues.length === 0 && <li className="text-sm text-gray-600">No open issues.</li>}
-              {openIssues.map((iss) => (
+              {openIssues.map((iss) => {
+                const issuePhotoCount = photoRows.filter(
+                  (p) => p.section_code === iss.section_code && p.item_key === iss.item_key
+                ).length;
+                const sectionHref = `/t/${orgSlug}/jobs/${jobId}/qa/paving/${runId}/${encodeURIComponent(iss.section_code)}`;
+                return (
                 <li key={iss.id} className="border border-gray-200 rounded-lg p-3 bg-white text-sm">
-                  <p className="font-medium text-gray-900">{iss.title ?? iss.item_key}</p>
-                  <p className="text-gray-600">
-                    {iss.section_code} · {iss.severity} · {iss.status}
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-gray-900">{iss.title ?? iss.item_key}</p>
+                    {issuePhotoCount > 0 && (
+                      <span className="flex-none text-xs text-[#698F00] bg-[#698F00]/10 px-1.5 py-0.5 rounded">
+                        {issuePhotoCount} photo{issuePhotoCount !== 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-gray-500 text-xs mt-0.5">
+                    {getSectionLabel(iss.section_code, setupVersion)}
                   </p>
+                  <p className="text-gray-600 mt-0.5 capitalize">
+                    {iss.severity.replace(/_/g, ' ')} · {iss.status.replace(/_/g, ' ')}
+                  </p>
+                  <Link
+                    href={sectionHref}
+                    className="inline-block mt-1.5 text-xs text-[#698F00] hover:underline"
+                  >
+                    View section evidence →
+                  </Link>
                   {canSupervise && (
                     <div className="mt-2 flex flex-wrap gap-2">
                       <button
@@ -182,7 +215,8 @@ export default function PavingQaSupervisorPage() {
                     </div>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ul>
             {canSupervise && (
               <div className="mt-4">

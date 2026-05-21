@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { validateJobForOrg, validateStageBelongsToJob, normalizeSupabaseError } from '@/lib/job-org-validation';
 import { guardStaffApi } from '@/lib/guard-staff-api';
-import { validateSetup } from '@/lib/paving-qa-v1-catalog';
+import { validateSetupV2 } from '@/lib/paving-qa-v2-setup';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -73,6 +73,11 @@ export async function POST(
     return staffAuth;
   }
 
+  // Only supervisor or admin may create new paving QA runs
+  if (staffAuth.staff.role !== 'supervisor' && staffAuth.staff.role !== 'admin') {
+    return jsonError('Only supervisors and admins can create paving QA runs', 403, requestId);
+  }
+
   const v = await validateJobForOrg(jobId, orgSlug, requestId);
   if (v instanceof NextResponse) {
     v.headers.set('x-request-id', requestId);
@@ -87,9 +92,10 @@ export async function POST(
     return jsonError('Invalid JSON body', 400, requestId);
   }
 
-  const setupParsed = validateSetup(body.setup ?? {});
+  const setupParsed = validateSetupV2(body.setup ?? {});
   if (!setupParsed.ok) {
-    return jsonError(setupParsed.message, 400, requestId);
+    const first = setupParsed.errors[0];
+    return jsonError(first?.message ?? 'Invalid setup', 400, requestId);
   }
   const setup = setupParsed.setup;
 
@@ -126,12 +132,13 @@ export async function POST(
       stage_id: stageId,
       status: 'active',
       setup,
+      setup_version: 2,
       started_at: now,
       updated_at: now,
       started_by: staffAuth.staff.id,
     })
     .select(
-      'id, job_id, stage_id, status, setup, started_at, updated_at, completed_at, supervisor_final_approved_at'
+      'id, job_id, stage_id, status, setup, setup_version, started_at, updated_at, completed_at, supervisor_final_approved_at'
     )
     .single();
 

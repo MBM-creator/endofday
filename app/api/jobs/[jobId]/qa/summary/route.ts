@@ -4,6 +4,7 @@ import { validateJobForOrg, normalizeSupabaseError } from '@/lib/job-org-validat
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
+import { v2RunHasIncompleteEvidence } from '@/lib/paving-qa-v2-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -68,12 +69,10 @@ export async function GET(
     return res;
   }
 
-  const incomplete = activeRunHasIncompleteEvidence(
-    bundle.setup,
-    bundle.submissions,
-    bundle.photoRows,
-    bundle.issues
-  );
+  const incomplete =
+    bundle.version === 1
+      ? activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
+      : v2RunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues);
 
   const res = NextResponse.json({
     ok: true,
@@ -81,6 +80,7 @@ export async function GET(
       id: active.id,
       started_at: active.started_at,
       setup: bundle.setup,
+      setup_version: bundle.run.setup_version,
     },
     incompleteEvidence: incomplete,
   });

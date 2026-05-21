@@ -66,6 +66,31 @@ function normaliseMatchText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/**
+ * Detect a mismatch between stage name / CC trade and the selected QA template.
+ * Returns a human-readable warning string, or null when no mismatch is detected.
+ */
+function getTemplateMismatchWarning(stage: Stage): string | null {
+  const templateName = (stage.checklist_templates?.name ?? '').toLowerCase();
+  if (!templateName) return null;
+
+  const stageName = stage.name.toLowerCase();
+  const ccTrade = (stage.cc_section_trade ?? '').toLowerCase().replace(/_/g, ' ');
+
+  const isPavingContext = stageName.includes('paving') || ccTrade.includes('paving');
+  const isIrrigationContext = stageName.includes('irrigation') || ccTrade.includes('irrigation');
+  const isPavingTemplate = templateName.includes('paving');
+  const isIrrigationTemplate = templateName.includes('irrigation');
+
+  if (isIrrigationContext && isPavingTemplate) {
+    return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Paving QA template.`;
+  }
+  if (isPavingContext && isIrrigationTemplate) {
+    return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Irrigation QA template.`;
+  }
+  return null;
+}
+
 function findSuggestedCcProject(job: Job, projects: CcProject[]): CcProject | null {
   if (job.cc_project_id || projects.length === 0) return null;
   const jobName = normaliseMatchText(job.name);
@@ -943,6 +968,9 @@ export default function JobDetailPage() {
                   const isSetting = stageIdSettingActive === stage.id;
                   const isUpdatingTemplate = stageIdUpdatingTemplate === stage.id;
                   const selectorDisabled = templatesLoading || !!templatesError || isUpdatingTemplate;
+                  const mismatchWarning = getTemplateMismatchWarning(stage);
+                  const templateNameLower = (stage.checklist_templates?.name ?? '').toLowerCase();
+                  const isPavingTemplate = templateNameLower.includes('paving');
                   return (
                     <li
                       key={stage.id}
@@ -981,29 +1009,51 @@ export default function JobDetailPage() {
                           </button>
                         )}
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <span className="text-sm text-gray-600">Template:</span>
-                        <select
-                          value={stage.checklist_template_id ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setStageTemplate(stage.id, val ? val : null);
-                          }}
-                          disabled={selectorDisabled}
-                          className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent bg-white text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 max-w-full"
-                          aria-label={`Template for ${stage.name}`}
-                        >
-                          <option value="">None</option>
-                          {templates.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}
-                            </option>
-                          ))}
-                        </select>
-                        {isUpdatingTemplate && (
-                          <span className="text-xs text-gray-500">Saving…</span>
-                        )}
+                      <div className="mt-3 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm text-gray-600">QA template:</span>
+                          <select
+                            value={stage.checklist_template_id ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setStageTemplate(stage.id, val ? val : null);
+                            }}
+                            disabled={selectorDisabled}
+                            className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent bg-white text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 max-w-full"
+                            aria-label={`QA template for ${stage.name}`}
+                          >
+                            <option value="">None</option>
+                            {templates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                          {isUpdatingTemplate && (
+                            <span className="text-xs text-gray-500">Saving…</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Choose the QA checklist template for this stage. This does not rename the stage.
+                        </p>
                       </div>
+
+                      {mismatchWarning && (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                          {mismatchWarning}
+                        </div>
+                      )}
+
+                      {isPavingTemplate && !mismatchWarning && (
+                        <div className="mt-2">
+                          <a
+                            href={`/t/${orgSlug}/jobs/${jobId}/qa`}
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
+                          >
+                            Open Paving QA
+                          </a>
+                        </div>
+                      )}
                       {stage.checklist_templates?.checklist_template_items &&
                         stage.checklist_templates.checklist_template_items.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-200">

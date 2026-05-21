@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
+import { v2RunHasIncompleteEvidence } from '@/lib/paving-qa-v2-graph';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -294,14 +295,31 @@ export async function GET(
 
     if (activeQa?.id) {
       const bundle = await loadRunBundle(activeQa.id as string, jobId);
-      if (
-        bundle.ok &&
-        activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
-      ) {
+      let hasIncomplete = false;
+      let warningMessage = '';
+      if (bundle.ok && bundle.version === 1) {
+        hasIncomplete = activeRunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'An active paving QA run still has incomplete required evidence. You can submit end of day, but finish QA when possible.';
+      } else if (bundle.ok && bundle.version === 2) {
+        hasIncomplete = v2RunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'Paving QA evidence is incomplete. Review the paving QA run before completing today\'s report.';
+      }
+      if (hasIncomplete) {
         qaEodWarning = {
           activeRunId: activeQa.id as string,
-          message:
-            'An active paving QA run still has incomplete required evidence. You can submit end of day, but finish QA when possible.',
+          message: warningMessage,
         };
       }
     }
