@@ -43,10 +43,8 @@ export function getV2Predecessors(
   switch (section) {
     case 'setup_protection':
       return [];
-    case 'drainage_falls':
-      return ['setup_protection'];
     case 'excavation_preparation':
-      return ['drainage_falls'];
+      return ['setup_protection'];
 
     case 'concrete_formwork':
       return ['excavation_preparation'];
@@ -66,7 +64,7 @@ export function getV2Predecessors(
       return [];
 
     case 'existing_concrete_assessment':
-      return ['drainage_falls'];
+      return ['excavation_preparation'];
 
     case 'adhesive_surface_preparation':
       if (method === 'glue_existing_concrete') return ['existing_concrete_assessment'];
