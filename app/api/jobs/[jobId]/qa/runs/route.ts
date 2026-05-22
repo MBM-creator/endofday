@@ -43,7 +43,7 @@ export async function GET(
   const { data: rows, error } = await supabaseAdmin
     .from('paving_qa_runs')
     .select(
-      'id, job_id, stage_id, status, setup, started_at, updated_at, completed_at, supervisor_final_approved_at'
+      'id, job_id, stage_id, status, setup, setup_version, started_at, updated_at, completed_at, supervisor_final_approved_at'
     )
     .eq('job_id', jobId)
     .order('started_at', { ascending: false });

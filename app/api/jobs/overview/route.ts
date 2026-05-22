@@ -45,20 +45,47 @@ function normalizeSupabaseError(err: unknown): {
   };
 }
 
+type QaRunStatus = 'active' | 'completed' | 'none';
+
 type JobOverviewEntry = {
   id: string;
   name: string;
   activeStageName: string | null;
-  checklistCompleted: number;
-  checklistTotal: number;
-  hasDailyNote: boolean;
-  eodSubmittedToday: boolean;
-  activeStageLastUpdatedAt: string | null;
-  blockerType?: string | null;
-  labourHoursToday?: number | null;
-  quotedLabourHours?: number | null;
-  actualLabourHoursTotal: number | null;
+  qaRunStatus: QaRunStatus;
+  qaRunId: string | null;
+  qaRunType: 'paving' | null;
+  qaRunApprovedAt: string | null;
 };
+
+type QaRunRow = {
+  id: string;
+  job_id: string;
+  status: string;
+  setup_version: number | null;
+  started_at: string;
+  updated_at: string | null;
+  completed_at: string | null;
+  supervisor_final_approved_at: string | null;
+};
+
+function runSortTime(run: QaRunRow): number {
+  const raw = run.updated_at ?? run.completed_at ?? run.started_at;
+  const time = new Date(raw).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function selectOverviewRun(runs: QaRunRow[]): QaRunRow | null {
+  const v2Runs = runs.filter((run) => run.setup_version === 2);
+  const active = v2Runs
+    .filter((run) => run.status === 'active')
+    .sort((a, b) => runSortTime(b) - runSortTime(a))[0];
+  if (active) return active;
+
+  const approved = v2Runs
+    .filter((run) => run.status === 'completed' && run.supervisor_final_approved_at)
+    .sort((a, b) => runSortTime(b) - runSortTime(a))[0];
+  return approved ?? null;
+}
 
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-vercel-id') ?? randomUUID().slice(0, 8);
@@ -120,7 +147,7 @@ export async function GET(request: NextRequest) {
 
   const { data: stages, error: stagesError } = await supabaseAdmin
     .from('stages')
-    .select('id, job_id, name, daily_note, daily_note_updated_at, quoted_labour_hours, checklist_templates(name, checklist_template_items(id))')
+    .select('id, job_id, name')
     .in('job_id', jobIds)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
@@ -131,190 +158,46 @@ export async function GET(request: NextRequest) {
     return serverError(requestId, supabaseErr.code ?? 'STAGES_GET', 'Failed to load stages');
   }
 
-  const stagesList = stages ?? [];
-  const activeStageIds = jobsList
-    .map((j: { active_stage_id?: string | null }) => j.active_stage_id)
-    .filter((id: string | null | undefined): id is string => id != null && id !== '');
+  const { data: qaRuns, error: qaRunsError } = await supabaseAdmin
+    .from('paving_qa_runs')
+    .select('id, job_id, status, setup_version, started_at, updated_at, completed_at, supervisor_final_approved_at')
+    .in('job_id', jobIds)
+    .in('status', ['active', 'completed']);
 
-  let completionsRows: { stage_id: string; checklist_template_item_id: string; completed_at: string }[] = [];
-  if (activeStageIds.length > 0) {
-    const { data: compRows, error: compErr } = await supabaseAdmin
-      .from('stage_checklist_completions')
-      .select('stage_id, checklist_template_item_id, completed_at')
-      .in('stage_id', activeStageIds);
-    if (!compErr && compRows) {
-      completionsRows = compRows.filter(
-        (r): r is { stage_id: string; checklist_template_item_id: string; completed_at: string } =>
-          typeof r.stage_id === 'string' &&
-          typeof r.checklist_template_item_id === 'string' &&
-          typeof r.completed_at === 'string'
-      );
+  if (qaRunsError) {
+    const supabaseErr = normalizeSupabaseError(qaRunsError);
+    console.error('[api/jobs/overview] QA runs fetch failed:', { requestId, supabaseError: supabaseErr });
+    return serverError(requestId, supabaseErr.code ?? 'QA_RUNS_GET', 'Failed to load QA status');
+  }
+
+  const stagesById = new Map<string, { id: string; job_id: string; name: string }>();
+  for (const stage of stages ?? []) {
+    if (typeof stage.id === 'string') {
+      stagesById.set(stage.id, stage as { id: string; job_id: string; name: string });
     }
   }
 
-  const todayUtc = new Date().toISOString().slice(0, 10);
-  const eodSubmittedAtByStage = new Map<string, string>();
-  if (activeStageIds.length > 0) {
-    const { data: eodRows, error: eodErr } = await supabaseAdmin
-      .from('stage_end_of_day')
-      .select('stage_id, submitted_at')
-      .in('stage_id', activeStageIds)
-      .eq('report_date', todayUtc);
-    if (!eodErr && eodRows) {
-      for (const row of eodRows) {
-        if (typeof row.stage_id === 'string' && typeof row.submitted_at === 'string') {
-          eodSubmittedAtByStage.set(row.stage_id, row.submitted_at);
-        }
-      }
-    }
-  }
-  const eodStageIds = new Set(eodSubmittedAtByStage.keys());
-
-  const blockerTypeByStage = new Map<string, string>();
-  if (activeStageIds.length > 0) {
-    const { data: blockerRows, error: blockerErr } = await supabaseAdmin
-      .from('stage_blockers')
-      .select('stage_id, blocker_type')
-      .in('stage_id', activeStageIds)
-      .eq('report_date', todayUtc);
-    if (!blockerErr && blockerRows) {
-      for (const row of blockerRows) {
-        if (typeof row.stage_id === 'string' && typeof row.blocker_type === 'string') {
-          blockerTypeByStage.set(row.stage_id, row.blocker_type);
-        }
-      }
-    }
-  }
-
-  const labourHoursByStage = new Map<string, number>();
-  if (activeStageIds.length > 0) {
-    const { data: labourRows, error: labourErr } = await supabaseAdmin
-      .from('stage_labour')
-      .select('stage_id, labour_hours')
-      .in('stage_id', activeStageIds)
-      .eq('report_date', todayUtc);
-    if (!labourErr && labourRows) {
-      for (const row of labourRows) {
-        if (typeof row.stage_id === 'string' && row.labour_hours != null) {
-          const n = Number(row.labour_hours);
-          if (!Number.isNaN(n) && n >= 0) labourHoursByStage.set(row.stage_id, n);
-        }
-      }
-    }
-  }
-
-  const actualLabourHoursTotalByStage = new Map<string, number>();
-  if (activeStageIds.length > 0) {
-    const { data: totalLabourRows, error: totalLabourErr } = await supabaseAdmin
-      .from('stage_labour')
-      .select('stage_id, labour_hours')
-      .in('stage_id', activeStageIds);
-    if (!totalLabourErr && totalLabourRows) {
-      for (const row of totalLabourRows) {
-        if (typeof row.stage_id === 'string' && row.labour_hours != null) {
-          const n = Number(row.labour_hours);
-          if (!Number.isNaN(n) && n >= 0) {
-            const prev = actualLabourHoursTotalByStage.get(row.stage_id) ?? 0;
-            actualLabourHoursTotalByStage.set(row.stage_id, prev + n);
-          }
-        }
-      }
-    }
-  }
-
-  const stagesByJob = new Map<string, typeof stagesList[0][]>();
-  for (const s of stagesList) {
-    const jid = s.job_id;
-    if (!jid) continue;
-    if (!stagesByJob.has(jid)) stagesByJob.set(jid, []);
-    stagesByJob.get(jid)!.push(s);
-  }
-
-  const completedCountByStage = new Map<string, number>();
-  for (const stage of stagesList) {
-    const stageId = stage.id;
-    const template = Array.isArray(stage.checklist_templates) ? stage.checklist_templates[0] : stage.checklist_templates;
-    const items = template?.checklist_template_items;
-    const itemIds = Array.isArray(items) ? items.map((i: { id?: string }) => i.id).filter((id): id is string => typeof id === 'string') : [];
-    const itemIdSet = new Set(itemIds);
-    const count = completionsRows.filter(
-      (r) => r.stage_id === stageId && itemIdSet.has(r.checklist_template_item_id)
-    ).length;
-    completedCountByStage.set(stageId, count);
+  const qaRunsByJob = new Map<string, QaRunRow[]>();
+  for (const run of (qaRuns ?? []) as QaRunRow[]) {
+    if (!qaRunsByJob.has(run.job_id)) qaRunsByJob.set(run.job_id, []);
+    qaRunsByJob.get(run.job_id)!.push(run);
   }
 
   const overview: JobOverviewEntry[] = jobsList.map((job: { id: string; name: string; active_stage_id?: string | null }) => {
-    const activeStageId = job.active_stage_id ?? null;
-    if (!activeStageId) {
-      return {
-        id: job.id,
-        name: job.name,
-        activeStageName: null,
-        checklistCompleted: 0,
-        checklistTotal: 0,
-        hasDailyNote: false,
-        eodSubmittedToday: false,
-        activeStageLastUpdatedAt: null,
-        blockerType: null,
-        labourHoursToday: null,
-        quotedLabourHours: null,
-        actualLabourHoursTotal: null,
-      };
-    }
-    const jobStages = stagesByJob.get(job.id) ?? [];
-    const activeStage = jobStages.find((s: { id: string }) => s.id === activeStageId);
-    if (!activeStage) {
-      return {
-        id: job.id,
-        name: job.name,
-        activeStageName: null,
-        checklistCompleted: 0,
-        checklistTotal: 0,
-        hasDailyNote: false,
-        eodSubmittedToday: false,
-        activeStageLastUpdatedAt: null,
-        blockerType: null,
-        labourHoursToday: null,
-        quotedLabourHours: null,
-        actualLabourHoursTotal: null,
-      };
-    }
-    const activeTemplate = Array.isArray(activeStage.checklist_templates) ? activeStage.checklist_templates[0] : activeStage.checklist_templates;
-    const items = activeTemplate?.checklist_template_items;
-    const checklistTotal = Array.isArray(items) ? items.length : 0;
-    const checklistCompleted = completedCountByStage.get(activeStage.id) ?? 0;
-    const hasDailyNote = ((activeStage.daily_note ?? '').trim() !== '');
-    const eodSubmittedToday = eodStageIds.has(activeStage.id);
-    const itemIds = Array.isArray(items) ? items.map((i: { id?: string }) => i.id).filter((id): id is string => typeof id === 'string') : [];
-    const itemIdSet = new Set(itemIds);
-    const completionTimestamps = completionsRows
-      .filter((r) => r.stage_id === activeStage.id && itemIdSet.has(r.checklist_template_item_id) && typeof r.completed_at === 'string')
-      .map((r) => new Date(r.completed_at!).getTime())
-      .filter((t) => !Number.isNaN(t));
-    const dailyNoteTs = typeof activeStage.daily_note_updated_at === 'string' ? new Date(activeStage.daily_note_updated_at).getTime() : NaN;
-    const eodTs = eodSubmittedAtByStage.get(activeStage.id);
-    const eodTsNum = typeof eodTs === 'string' ? new Date(eodTs).getTime() : NaN;
-    const allTs = [...completionTimestamps, ...(Number.isNaN(dailyNoteTs) ? [] : [dailyNoteTs]), ...(Number.isNaN(eodTsNum) ? [] : [eodTsNum])];
-    const latestTs = allTs.length > 0 ? Math.max(...allTs) : NaN;
-    const activeStageLastUpdatedAt = Number.isNaN(latestTs) ? null : new Date(latestTs).toISOString();
-    const blockerType = blockerTypeByStage.get(activeStage.id) ?? null;
-    const labourHoursToday = labourHoursByStage.has(activeStage.id) ? labourHoursByStage.get(activeStage.id)! : null;
-    const quotedRaw = activeStage.quoted_labour_hours;
-    const quotedLabourHours = quotedRaw != null && !Number.isNaN(Number(quotedRaw)) && Number(quotedRaw) >= 0 ? Number(quotedRaw) : null;
-    const actualLabourHoursTotal = actualLabourHoursTotalByStage.get(activeStage.id) ?? null;
+    const selectedRun = selectOverviewRun(qaRunsByJob.get(job.id) ?? []);
+    const activeStage = job.active_stage_id ? stagesById.get(job.active_stage_id) ?? null : null;
     return {
       id: job.id,
       name: job.name,
-      activeStageName: activeStage.name ?? null,
-      checklistCompleted,
-      checklistTotal,
-      hasDailyNote,
-      eodSubmittedToday,
-      activeStageLastUpdatedAt,
-      blockerType,
-      labourHoursToday,
-      quotedLabourHours,
-      actualLabourHoursTotal,
+      activeStageName: activeStage?.name ?? null,
+      qaRunStatus: selectedRun?.status === 'active'
+        ? 'active'
+        : selectedRun?.status === 'completed'
+          ? 'completed'
+          : 'none',
+      qaRunId: selectedRun?.id ?? null,
+      qaRunType: selectedRun ? 'paving' : null,
+      qaRunApprovedAt: selectedRun?.supervisor_final_approved_at ?? null,
     };
   });
 
