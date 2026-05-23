@@ -53,7 +53,7 @@ type JobOverviewEntry = {
   activeStageName: string | null;
   qaRunStatus: QaRunStatus;
   qaRunId: string | null;
-  qaRunType: 'paving' | null;
+  qaRunType: 'paving' | 'irrigation' | null;
   qaRunApprovedAt: string | null;
 };
 
@@ -61,6 +61,7 @@ type QaRunRow = {
   id: string;
   job_id: string;
   status: string;
+  qa_type?: string | null;
   setup_version: number | null;
   started_at: string;
   updated_at: string | null;
@@ -75,13 +76,13 @@ function runSortTime(run: QaRunRow): number {
 }
 
 function selectOverviewRun(runs: QaRunRow[]): QaRunRow | null {
-  const v2Runs = runs.filter((run) => run.setup_version === 2);
-  const active = v2Runs
+  const currentRuns = runs.filter((run) => run.qa_type === 'irrigation' || run.setup_version === 2);
+  const active = currentRuns
     .filter((run) => run.status === 'active')
     .sort((a, b) => runSortTime(b) - runSortTime(a))[0];
   if (active) return active;
 
-  const approved = v2Runs
+  const approved = currentRuns
     .filter((run) => run.status === 'completed' && run.supervisor_final_approved_at)
     .sort((a, b) => runSortTime(b) - runSortTime(a))[0];
   return approved ?? null;
@@ -160,7 +161,7 @@ export async function GET(request: NextRequest) {
 
   const { data: qaRuns, error: qaRunsError } = await supabaseAdmin
     .from('paving_qa_runs')
-    .select('id, job_id, status, setup_version, started_at, updated_at, completed_at, supervisor_final_approved_at')
+    .select('id, job_id, status, qa_type, setup_version, started_at, updated_at, completed_at, supervisor_final_approved_at')
     .in('job_id', jobIds)
     .in('status', ['active', 'completed']);
 
@@ -196,7 +197,7 @@ export async function GET(request: NextRequest) {
           ? 'completed'
           : 'none',
       qaRunId: selectedRun?.id ?? null,
-      qaRunType: selectedRun ? 'paving' : null,
+      qaRunType: selectedRun ? ((selectedRun.qa_type === 'irrigation' ? 'irrigation' : 'paving') as 'paving' | 'irrigation') : null,
       qaRunApprovedAt: selectedRun?.supervisor_final_approved_at ?? null,
     };
   });

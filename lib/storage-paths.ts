@@ -93,3 +93,23 @@ export function pavingQaPhotoStoragePath(
   const item = slugifyPathSegment(itemKey, 64);
   return `jobs/${seg}/qa/${runId}/${sec}/${item}/${fileName}`;
 }
+
+/**
+ * QA evidence photos with an explicit QA type segment.
+ * jobs/{jobSlugOrId}/qa/{qaType}/{runId}/{sectionCode}/{itemKey}/{uuid}.jpg
+ */
+export function qaEvidencePhotoStoragePath(
+  qaType: 'paving' | 'irrigation',
+  jobId: string,
+  jobName: string,
+  runId: string,
+  sectionCode: string,
+  itemKey: string,
+  fileName: string
+): string {
+  const seg = jobSlugOrIdSegment(jobId, jobName);
+  const type = slugifyPathSegment(qaType, 32);
+  const sec = slugifyPathSegment(sectionCode, 64);
+  const item = slugifyPathSegment(itemKey, 64);
+  return `jobs/${seg}/qa/${type}/${runId}/${sec}/${item}/${fileName}`;
+}

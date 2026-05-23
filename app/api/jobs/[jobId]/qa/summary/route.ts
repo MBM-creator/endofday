@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { validateJobForOrg, normalizeSupabaseError } from '@/lib/job-org-validation';
 import { guardStaffApi } from '@/lib/guard-staff-api';
-import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
+import { loadQaRunBundle } from '@/lib/qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
 import { v2RunHasIncompleteEvidence } from '@/lib/paving-qa-v2-graph';
+import { irrigationRunHasIncompleteEvidence } from '@/lib/irrigation-qa-v1-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -37,52 +38,68 @@ export async function GET(
 
   const { data: active, error } = await supabaseAdmin
     .from('paving_qa_runs')
-    .select('id, status, setup, started_at')
+    .select('id, status, qa_type, setup, started_at')
     .eq('job_id', jobId)
     .eq('status', 'active')
-    .limit(1)
-    .maybeSingle();
+    .order('started_at', { ascending: false });
 
   if (error) {
     console.error('[qa/summary]', { requestId, error: normalizeSupabaseError(error) });
     return serverError(requestId);
   }
 
-  if (!active) {
+  const activeRows = active ?? [];
+
+  if (activeRows.length === 0) {
     const res = NextResponse.json({
       ok: true,
       activeRun: null,
+      activeRuns: [],
       incompleteEvidence: false,
+      incompleteByType: {},
     });
     res.headers.set('x-request-id', requestId);
     return res;
   }
 
-  const bundle = await loadRunBundle(active.id as string, jobId);
-  if (!bundle.ok) {
-    const res = NextResponse.json({
-      ok: true,
-      activeRun: { id: active.id, started_at: active.started_at },
-      incompleteEvidence: true,
+  const activeRuns = [];
+  const incompleteByType: Record<string, boolean> = {};
+
+  for (const row of activeRows) {
+    const bundle = await loadQaRunBundle(row.id as string, jobId);
+    if (!bundle.ok) {
+      const type = String((row as { qa_type?: string | null }).qa_type ?? 'paving');
+      incompleteByType[type] = true;
+      activeRuns.push({ id: row.id, started_at: row.started_at, qa_type: type, incompleteEvidence: true });
+      continue;
+    }
+
+    const incomplete =
+      bundle.qaType === 'irrigation'
+        ? irrigationRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
+        : bundle.version === 1
+          ? activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
+          : v2RunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues);
+
+    incompleteByType[bundle.qaType] = incomplete;
+    activeRuns.push({
+      id: row.id,
+      started_at: row.started_at,
+      qa_type: bundle.qaType,
+      setup: bundle.setup,
+      setup_version: bundle.run.setup_version,
+      incompleteEvidence: incomplete,
     });
-    res.headers.set('x-request-id', requestId);
-    return res;
   }
 
-  const incomplete =
-    bundle.version === 1
-      ? activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
-      : v2RunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues);
+  const primary = activeRuns[0] ?? null;
 
   const res = NextResponse.json({
     ok: true,
-    activeRun: {
-      id: active.id,
-      started_at: active.started_at,
-      setup: bundle.setup,
-      setup_version: bundle.run.setup_version,
-    },
-    incompleteEvidence: incomplete,
+    activeRun: primary,
+    activeRuns,
+    incompleteEvidence: activeRuns.some((run) => run.incompleteEvidence),
+    incompleteByType,
   });
   res.headers.set('x-request-id', requestId);
   return res;

@@ -440,13 +440,10 @@ function V2SectionPage({
       );
       const data = await res.json();
       if (!res.ok || !data?.ok) {
-        setError(
-          typeof data?.message === 'string'
-            ? data.message
-            : Array.isArray(data?.errors)
-              ? data.errors.join('; ')
-              : 'Save failed'
-        );
+        const specificErrors = Array.isArray(data?.errors) && data.errors.length > 0
+          ? (data.errors as string[]).join('\n')
+          : null;
+        setError(specificErrors ?? (typeof data?.message === 'string' ? data.message : 'Save failed'));
         return;
       }
       setPhotoFiles({});
@@ -533,8 +530,10 @@ function V2SectionPage({
           </div>
         )}
         {error && (
-          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-            {error}
+          <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm space-y-1">
+            {error.split('\n').map((line, i) => (
+              <p key={i}>{line}</p>
+            ))}
           </div>
         )}
 
@@ -562,7 +561,10 @@ function V2SectionPage({
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                  {(['pass', 'fail'] as const).map((r) => (
+                  {(item.allowNa
+                    ? (['pass', 'fail', 'not_required'] as const)
+                    : (['pass', 'fail'] as const)
+                  ).map((r) => (
                     <label key={r} className="flex items-center gap-1.5 text-sm cursor-pointer">
                       <input
                         type="radio"
@@ -572,7 +574,7 @@ function V2SectionPage({
                         onChange={() => setResult(item.key, r)}
                         className="accent-[#698F00]"
                       />
-                      <span>{r.charAt(0).toUpperCase() + r.slice(1)}</span>
+                      <span>{r === 'not_required' ? 'N/A' : r.charAt(0).toUpperCase() + r.slice(1)}</span>
                     </label>
                   ))}
                 </div>
@@ -580,26 +582,36 @@ function V2SectionPage({
                 {/* Note field: always shown on fail; also shown when noteRequiredWhen matches
                     or when an existing note is present (so pre-populated notes remain visible) */}
                 {(result === 'fail' ||
-                  (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail') ||
-                  Boolean(answers[item.key]?.note)) && (
-                  <textarea
-                    placeholder={
-                      item.notePrompt ??
-                      (result === 'fail' ? 'Note (required when failed)' : 'Note (required)')
-                    }
-                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                    rows={2}
-                    value={answers[item.key]?.note ?? ''}
-                    disabled={!canSubmit}
-                    onChange={(e) => setNote(item.key, e.target.value)}
-                  />
-                )}
+                  (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail' | 'not_required') ||
+                  Boolean(answers[item.key]?.note)) && (() => {
+                  const noteIsRequired =
+                    result === 'fail' ||
+                    (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail' | 'not_required');
+                  return (
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-gray-700">
+                        Note{noteIsRequired ? <span className="text-red-500 ml-0.5">*</span> : null}
+                      </p>
+                      <textarea
+                        placeholder={
+                          item.notePrompt ??
+                          (result === 'fail' ? 'Describe the issue (required)' : 'Note (required)')
+                        }
+                        className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
+                        rows={2}
+                        value={answers[item.key]?.note ?? ''}
+                        disabled={!canSubmit}
+                        onChange={(e) => setNote(item.key, e.target.value)}
+                      />
+                    </div>
+                  );
+                })()}
 
                 {/* Saved photo evidence — always visible when photos exist */}
                 <SavedPhotos savedCount={savedPhotoCount} loadedPhotos={loadedPhotos} />
 
-                {/* Upload section — only for requirePhoto items */}
-                {item.requirePhoto && (
+                {/* Upload section — hidden when N/A is selected (photo not required) */}
+                {item.requirePhoto && result !== 'not_required' && (
                   <div>
                     <p className="text-xs text-gray-600 mb-1.5">
                       {savedPhotoCount > 0 ? 'Add more photos (optional)' : 'Photos'}

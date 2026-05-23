@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { validateJobForOrg, isValidUuid } from '@/lib/job-org-validation';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { loadRunBundle, computeRunSectionStates } from '@/lib/paving-qa-run-bundle';
+import { loadQaRunBundle } from '@/lib/qa-run-bundle';
 import { computeV2SectionUiStates } from '@/lib/paving-qa-v2-graph';
+import { computeIrrigationSectionUiStates } from '@/lib/irrigation-qa-v1-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -37,6 +39,30 @@ export async function GET(
     return v;
   }
 
+  const typedBundle = await loadQaRunBundle(runId, jobId);
+  if (typedBundle.ok && typedBundle.qaType === 'irrigation') {
+    const sectionStates = computeIrrigationSectionUiStates(
+      typedBundle.setup,
+      typedBundle.submissions,
+      typedBundle.photoRows,
+      typedBundle.issues
+    );
+    const res = NextResponse.json({
+      ok: true,
+      job: v.job,
+      run: typedBundle.run,
+      qaType: 'irrigation',
+      setupVersion: 1,
+      setup: typedBundle.setup,
+      sectionStates,
+      issues: typedBundle.issues,
+      submissions: typedBundle.submissions,
+      photoRows: typedBundle.photoRows,
+    });
+    res.headers.set('x-request-id', requestId);
+    return res;
+  }
+
   const bundle = await loadRunBundle(runId, jobId);
   if (!bundle.ok) {
     return jsonError('Run not found', 404, requestId);
@@ -53,6 +79,7 @@ export async function GET(
       ok: true,
       job: v.job,
       run: bundle.run,
+      qaType: 'paving',
       setupVersion: 2,
       setup: bundle.setup,
       sectionStates,
@@ -77,6 +104,7 @@ export async function GET(
     ok: true,
     job: v.job,
     run: bundle.run,
+    qaType: 'paving',
     setupVersion: 1,
     setup: bundle.setup,
     sectionStates,

@@ -10,6 +10,8 @@ interface RunRow {
   id: string;
   status: string;
   started_at: string;
+  qa_type?: string | null;
+  setup_version?: number | null;
 }
 
 interface JobContext {
@@ -55,7 +57,8 @@ export default function PavingQaHubPage() {
     };
   }, [orgSlug, jobId]);
 
-  const active = runs.find((x) => x.status === 'active');
+  const activePaving = runs.find((x) => x.status === 'active' && (x.qa_type ?? 'paving') === 'paving');
+  const activeIrrigation = runs.find((x) => x.status === 'active' && x.qa_type === 'irrigation');
   const linkedToRealCcProject = Boolean(job?.cc_project_id);
   const applicableTrades = new Set(ccProject?.trades ?? []);
   const hasCcTradeData = Boolean(ccProject);
@@ -112,9 +115,9 @@ export default function PavingQaHubPage() {
                           Evidence run for paving works, base preparation, set-out, surface and supervisor sign-off.
                         </p>
                       </div>
-                      {active ? (
+                      {activePaving ? (
                         <Link
-                          href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${active.id}`}
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${activePaving.id}`}
                           className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
                         >
                           Open active Paving QA run →
@@ -137,16 +140,24 @@ export default function PavingQaHubPage() {
                       <div>
                         <p className="text-sm font-medium text-gray-900">Irrigation QA</p>
                         <p className="mt-1 text-sm text-gray-600">
-                          This is the applicable QA check for the linked irrigation project. The irrigation workflow is next to build.
+                          Evidence run for irrigation water source checks, before-cover records, controller setup, testing and handover.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        disabled
-                        className="py-2 px-4 rounded-lg font-medium text-white bg-gray-400 cursor-not-allowed"
-                      >
-                        Coming next
-                      </button>
+                      {activeIrrigation ? (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${activeIrrigation.id}`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Open active Irrigation QA run →
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/new`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Start Irrigation QA
+                        </Link>
+                      )}
                     </div>
                   </div>
                 )}
@@ -161,15 +172,17 @@ export default function PavingQaHubPage() {
 
             {hasExistingPavingRuns && (
               <section className="mt-8">
-                <h2 className="text-lg font-semibold text-gray-900 mb-2">Paving runs</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">QA runs</h2>
                 <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg bg-white">
                   {runs.map((r) => (
                     <li key={r.id} className="px-4 py-3 flex justify-between items-center">
                       <span className="text-sm text-gray-700">
-                        {new Date(r.started_at).toLocaleString()} — {r.status}
+                        {new Date(r.started_at).toLocaleString()} — {(r.qa_type ?? 'paving')} — {r.status}
                       </span>
                       <Link
-                        href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${r.id}`}
+                        href={(r.qa_type ?? 'paving') === 'irrigation'
+                          ? `/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${r.id}`
+                          : `/t/${orgSlug}/jobs/${jobId}/qa/paving/${r.id}`}
                         className="text-sm text-[#698F00] hover:underline"
                       >
                         View

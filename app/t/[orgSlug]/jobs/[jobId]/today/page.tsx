@@ -56,7 +56,18 @@ function isPavingStage(stage: Stage | null, ccProject: CcProject | null): boolea
   return trade.includes('paving') || name.includes('paving') || template.includes('paving') || trades.has('paving');
 }
 
+function isIrrigationStage(stage: Stage | null, ccProject: CcProject | null): boolean {
+  const trade = (stage?.cc_section_trade ?? '').toLowerCase().replace(/_/g, ' ');
+  const name = (stage?.name ?? '').toLowerCase();
+  const template = templateName(stage).toLowerCase();
+  const trades = new Set(ccProject?.trades ?? []);
+  return trade.includes('irrigation') || name.includes('irrigation') || template.includes('irrigation') || trades.has('irrigation');
+}
+
 function runHref(orgSlug: string, jobId: string, run: QaRun, activeStage: Stage | null, ccProject: CcProject | null): string {
+  if (run.qa_type === 'irrigation') {
+    return `/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${run.id}`;
+  }
   if (run.setup_version === 2 && isPavingStage(activeStage, ccProject)) {
     return `/t/${orgSlug}/jobs/${jobId}/qa/paving/${run.id}`;
   }
@@ -130,11 +141,16 @@ export default function TodaysWorkPage() {
     ? stages.find((stage) => stage.id === job.active_stage_id) ?? null
     : null;
 
-  const v2Runs = runs.filter((run) => run.setup_version === 2);
-  const activeRun = v2Runs.find((run) => run.status === 'active') ?? null;
+  const currentRuns = runs.filter((run) => run.qa_type === 'irrigation' || run.setup_version === 2);
+  const activeRuns = currentRuns.filter((run) => run.status === 'active');
+  const activeRun =
+    activeRuns.find((run) => run.qa_type === 'irrigation' && isIrrigationStage(activeStage, ccProject)) ??
+    activeRuns.find((run) => (run.qa_type ?? 'paving') === 'paving' && isPavingStage(activeStage, ccProject)) ??
+    activeRuns[0] ??
+    null;
   const latestApprovedRun =
-    v2Runs.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
-  const hasLegacyRuns = runs.some((run) => run.setup_version !== 2);
+    currentRuns.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
+  const hasLegacyRuns = runs.some((run) => run.setup_version !== 2 && run.qa_type !== 'irrigation');
   const qaHubHref = `/t/${orgSlug}/jobs/${jobId}/qa`;
   const detailHref = `/t/${orgSlug}/jobs/${jobId}`;
 
@@ -195,6 +211,11 @@ export default function TodaysWorkPage() {
                 >
                   Continue QA run →
                 </Link>
+                {activeRuns.length > 1 && (
+                  <Link href={qaHubHref} className="ml-3 mt-4 inline-block py-2 px-4 rounded-lg font-medium text-[#698F00] border border-[#698F00]/30 hover:bg-[#698F00]/5 transition-colors">
+                    View all QA
+                  </Link>
+                )}
               </div>
             )}
 

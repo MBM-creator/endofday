@@ -10,7 +10,7 @@ interface JobOverviewEntry {
   activeStageName: string | null;
   qaRunStatus: 'active' | 'completed' | 'none';
   qaRunId: string | null;
-  qaRunType: 'paving' | null;
+  qaRunType: 'paving' | 'irrigation' | null;
   qaRunApprovedAt: string | null;
 }
 
@@ -27,6 +27,9 @@ function qaBadge(job: JobOverviewEntry): { label: string; className: string } {
 function qaHref(orgSlug: string, job: JobOverviewEntry): string {
   if (job.qaRunType === 'paving' && job.qaRunId) {
     return `/t/${orgSlug}/jobs/${job.id}/qa/paving/${job.qaRunId}`;
+  }
+  if (job.qaRunType === 'irrigation' && job.qaRunId) {
+    return `/t/${orgSlug}/jobs/${job.id}/qa/irrigation/${job.qaRunId}`;
   }
   return `/t/${orgSlug}/jobs/${job.id}/qa`;
 }

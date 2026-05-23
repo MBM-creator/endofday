@@ -63,6 +63,7 @@ interface JobBrief {
 interface QaRun {
   id: string;
   status: string;
+  qa_type?: string | null;
   setup_version: number | null;
   started_at: string;
   completed_at?: string | null;
@@ -668,10 +669,10 @@ export default function JobDetailPage() {
     selectedCcProject?.project_title ?? job?.cc_project_title_snapshot ?? '';
   const connectedClientName =
     selectedCcProject?.client_name ?? job?.cc_client_name_snapshot ?? '';
-  const v2QaRuns = qaRuns.filter((run) => run.setup_version === 2);
-  const activeQaRun = v2QaRuns.find((run) => run.status === 'active') ?? null;
+  const currentQaRuns = qaRuns.filter((run) => run.qa_type === 'irrigation' || run.setup_version === 2);
+  const activeQaRun = currentQaRuns.find((run) => run.status === 'active') ?? null;
   const approvedQaRun =
-    v2QaRuns.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
+    currentQaRuns.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
   const qaStatusLabel = qaRunsError
     ? 'QA status unavailable'
     : activeQaRun
@@ -988,6 +989,7 @@ export default function JobDetailPage() {
                   const mismatchWarning = getTemplateMismatchWarning(stage);
                   const templateNameLower = (stage.checklist_templates?.name ?? '').toLowerCase();
                   const isPavingTemplate = templateNameLower.includes('paving');
+                  const isIrrigationTemplate = templateNameLower.includes('irrigation');
                   return (
                     <li
                       key={stage.id}
@@ -1068,6 +1070,16 @@ export default function JobDetailPage() {
                             className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
                           >
                             Open Paving QA
+                          </a>
+                        </div>
+                      )}
+                      {isIrrigationTemplate && !mismatchWarning && (
+                        <div className="mt-2">
+                          <a
+                            href={`/t/${orgSlug}/jobs/${jobId}/qa`}
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
+                          >
+                            Open Irrigation QA
                           </a>
                         </div>
                       )}
