@@ -40,6 +40,7 @@ export interface CcProject {
   client_id: string;
   project_title: string;
   client_name: string;
+  client_contact: string | null;
   site_address: string | null;
   status: CcProjectStatus;
   trades: CcProjectTrade[];
@@ -207,6 +208,7 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
     const client_id = p.client_id;
     const project_title = p.project_title;
     const client_name = p.client_name;
+    const client_contact = p.client_contact;
     const site_address = p.site_address;
     const status = p.status;
     const tradesRaw = p.trades;
@@ -225,6 +227,9 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
     }
     if (typeof client_name !== 'string' || client_name.trim() === '') {
       throw new Error('Invalid Client Connect response: client_name must be a non-empty string');
+    }
+    if (client_contact !== null && client_contact !== undefined && typeof client_contact !== 'string') {
+      throw new Error('Invalid Client Connect response: client_contact must be string or null');
     }
     if (site_address !== null && typeof site_address !== 'string') {
       throw new Error('Invalid Client Connect response: site_address must be string or null');
@@ -246,6 +251,9 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
       client_id,
       project_title,
       client_name,
+      client_contact: typeof client_contact === 'string' && client_contact.trim() !== ''
+        ? client_contact
+        : null,
       site_address: site_address ?? null,
       status,
       trades,

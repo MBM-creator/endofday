@@ -189,6 +189,9 @@ export default function NewJobPage() {
                     <div>
                       <p className="font-medium text-gray-900">{selectedProject.project_title}</p>
                       <p className="text-gray-600">{selectedProject.client_name}</p>
+                      {selectedProject.client_contact && (
+                        <p className="text-gray-600">{selectedProject.client_contact}</p>
+                      )}
                       {selectedProject.site_address && (
                         <p className="text-gray-600">{selectedProject.site_address}</p>
                       )}
