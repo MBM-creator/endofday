@@ -99,7 +99,7 @@ export function pavingQaPhotoStoragePath(
  * jobs/{jobSlugOrId}/qa/{qaType}/{runId}/{sectionCode}/{itemKey}/{uuid}.jpg
  */
 export function qaEvidencePhotoStoragePath(
-  qaType: 'paving' | 'irrigation',
+  qaType: 'paving' | 'irrigation' | 'fencing',
   jobId: string,
   jobName: string,
   runId: string,

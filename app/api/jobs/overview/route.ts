@@ -53,7 +53,7 @@ type JobOverviewEntry = {
   activeStageName: string | null;
   qaRunStatus: QaRunStatus;
   qaRunId: string | null;
-  qaRunType: 'paving' | 'irrigation' | null;
+  qaRunType: 'paving' | 'irrigation' | 'fencing' | null;
   qaRunApprovedAt: string | null;
 };
 
@@ -76,7 +76,7 @@ function runSortTime(run: QaRunRow): number {
 }
 
 function selectOverviewRun(runs: QaRunRow[]): QaRunRow | null {
-  const currentRuns = runs.filter((run) => run.qa_type === 'irrigation' || run.setup_version === 2);
+  const currentRuns = runs.filter((run) => run.qa_type === 'irrigation' || run.qa_type === 'fencing' || run.setup_version === 2);
   const active = currentRuns
     .filter((run) => run.status === 'active')
     .sort((a, b) => runSortTime(b) - runSortTime(a))[0];
@@ -197,7 +197,13 @@ export async function GET(request: NextRequest) {
           ? 'completed'
           : 'none',
       qaRunId: selectedRun?.id ?? null,
-      qaRunType: selectedRun ? ((selectedRun.qa_type === 'irrigation' ? 'irrigation' : 'paving') as 'paving' | 'irrigation') : null,
+      qaRunType: selectedRun
+        ? (selectedRun.qa_type === 'irrigation'
+          ? 'irrigation'
+          : selectedRun.qa_type === 'fencing'
+            ? 'fencing'
+            : 'paving')
+        : null,
       qaRunApprovedAt: selectedRun?.supervisor_final_approved_at ?? null,
     };
   });

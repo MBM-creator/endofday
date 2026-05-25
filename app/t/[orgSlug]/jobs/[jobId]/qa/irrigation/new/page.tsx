@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   IRRIGATION_QA_TYPE_LABELS,
@@ -21,8 +21,10 @@ type FieldErrors = Partial<Record<'irrigation_type' | 'water_sources' | 'system_
 export default function NewIrrigationQaRunPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
   const jobId = (params?.jobId as string) ?? '';
+  const stageId = searchParams.get('stageId')?.trim() || null;
 
   const [role, setRole] = useState<string | null>(null);
   const [irrigationType, setIrrigationType] = useState<IrrigationQaType | ''>('');
@@ -72,7 +74,7 @@ export default function NewIrrigationQaRunPage() {
       const res = await fetch(`/api/jobs/${jobId}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ qaType: 'irrigation', setup: parsed.setup }),
+        body: JSON.stringify({ qaType: 'irrigation', setup: parsed.setup, stageId }),
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {

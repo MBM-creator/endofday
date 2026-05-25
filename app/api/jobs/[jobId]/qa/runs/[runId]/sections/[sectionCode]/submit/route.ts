@@ -23,10 +23,18 @@ import {
   isIrrigationSectionCode,
   type IrrigationSectionCode,
 } from '@/lib/irrigation-qa-v1-catalog';
+import {
+  getApplicableFencingSectionCodes,
+  getFencingSectionDefinition,
+  isFencingSectionCode,
+  type FencingSectionCode,
+} from '@/lib/fencing-qa-v1-catalog';
 import { validateSetupV2 } from '@/lib/paving-qa-v2-setup';
 import { validateIrrigationSetupV1 } from '@/lib/irrigation-qa-v1-setup';
+import { validateFencingSetupV1 } from '@/lib/fencing-qa-v1-setup';
 import { computeV2SectionUiStates } from '@/lib/paving-qa-v2-graph';
 import { computeIrrigationSectionUiStates } from '@/lib/irrigation-qa-v1-graph';
+import { computeFencingSectionUiStates } from '@/lib/fencing-qa-v1-graph';
 import { validateCrewSectionPayload, validateCrewSectionPayloadIrrigation, validateCrewSectionPayloadV2 } from '@/lib/paving-qa-submit-validation';
 import { newImageStorageFileName, pavingQaPhotoStoragePath, qaEvidencePhotoStoragePath } from '@/lib/storage-paths';
 import type { PavingSectionCode } from '@/lib/paving-qa-v1-types';
@@ -140,7 +148,7 @@ async function uploadSectionPhotos(
   staffId: string,
   requestId: string,
   deleteExisting = true,
-  qaType: 'paving' | 'irrigation' = 'paving'
+  qaType: 'paving' | 'irrigation' | 'fencing' = 'paving'
 ): Promise<NextResponse | null> {
   if (deleteExisting) {
     // v1 replace-mode: remove existing photos before uploading new ones
@@ -162,8 +170,8 @@ async function uploadSectionPhotos(
   for (const [itemKey, files] of filesByItem) {
     for (const file of files) {
       const fileName = newImageStorageFileName();
-      const storagePath = qaType === 'irrigation'
-        ? qaEvidencePhotoStoragePath('irrigation', jobId, jobName, runId, sectionCode, itemKey, fileName)
+      const storagePath = qaType === 'irrigation' || qaType === 'fencing'
+        ? qaEvidencePhotoStoragePath(qaType, jobId, jobName, runId, sectionCode, itemKey, fileName)
         : pavingQaPhotoStoragePath(jobId, jobName, runId, sectionCode, itemKey, fileName);
       const buf = Buffer.from(await file.arrayBuffer());
       const { error: upErr } = await supabaseAdmin.storage.from(BUCKET).upload(storagePath, buf, {
@@ -226,6 +234,12 @@ export async function POST(
 
   if ((run as { qa_type?: string | null }).qa_type === 'irrigation') {
     return await handleIrrigationSubmit(
+      request, sectionCodeRaw, run, jobId, runId, v.job.name, staffAuth.staff, requestId
+    );
+  }
+
+  if ((run as { qa_type?: string | null }).qa_type === 'fencing') {
+    return await handleFencingSubmit(
       request, sectionCodeRaw, run, jobId, runId, v.job.name, staffAuth.staff, requestId
     );
   }
@@ -722,6 +736,165 @@ async function handleIrrigationSubmit(
         detail: (answers[item.key]?.note ?? '').trim() || null,
       });
       if (issErr) console.error('[qa/submit irrigation] issue', { requestId, error: normalizeSupabaseError(issErr) });
+    }
+  }
+
+  await supabaseAdmin.from('paving_qa_runs').update({ updated_at: submittedAt }).eq('id', runId);
+
+  const res = NextResponse.json({ ok: true, submittedAt, actorDisplay: staff.full_name, sectionCode });
+  res.headers.set('x-request-id', requestId);
+  return res;
+}
+
+// ---------------------------------------------------------------------------
+// Fencing submit handler
+// ---------------------------------------------------------------------------
+
+async function handleFencingSubmit(
+  request: NextRequest,
+  sectionCodeRaw: string,
+  run: { id: string; job_id: string; status: string; setup: unknown },
+  jobId: string,
+  runId: string,
+  jobName: string,
+  staff: { id: string; full_name: string },
+  requestId: string
+): Promise<NextResponse> {
+  if (!isFencingSectionCode(sectionCodeRaw)) {
+    return jsonError('Unknown fencing section code', 400, requestId);
+  }
+  const sectionCode = sectionCodeRaw as FencingSectionCode;
+
+  const setupResult = validateFencingSetupV1(run.setup);
+  if (!setupResult.ok) return serverError(requestId, 'Invalid fencing run setup');
+  const setup = setupResult.setup;
+
+  if (!getApplicableFencingSectionCodes(setup).includes(sectionCode)) {
+    return jsonError('Section is not part of this fencing run', 400, requestId);
+  }
+
+  const { submissions, issues, photoRows } = await loadSubmissionsAndIssues(runId);
+  const sectionStates = computeFencingSectionUiStates(setup, submissions, photoRows, issues);
+  const myState = sectionStates.find((s) => s.code === sectionCode);
+  if (!myState) return jsonError('Section state not found', 400, requestId);
+  if (myState.status === 'blocked_by_unresolved_issue' && myState.blockedBy?.length) {
+    return conflictError(
+      'Section is blocked by incomplete or unresolved upstream sections',
+      { blockedBy: myState.blockedBy },
+      requestId
+    );
+  }
+
+  const sectionDef = getFencingSectionDefinition(sectionCode);
+  if (!sectionDef) return serverError(requestId, 'Section definition not found');
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return jsonError('Failed to parse request body', 400, requestId);
+  }
+
+  const answersRaw = String(formData.get('answers') ?? '').trim();
+  let answers: Record<string, { result?: string; note?: string }> = {};
+  if (answersRaw) {
+    try {
+      const parsed = JSON.parse(answersRaw) as unknown;
+      if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        answers = parsed as Record<string, { result?: string; note?: string }>;
+      }
+    } catch {
+      return jsonError('answers must be valid JSON', 400, requestId);
+    }
+  }
+
+  const filesByItem = new Map<string, File[]>();
+  for (const [key, val] of formData.entries()) {
+    if (key.startsWith('item_') && val instanceof File && val.size > 0) {
+      const itemKey = key.slice('item_'.length);
+      const list = filesByItem.get(itemKey) ?? [];
+      list.push(val);
+      filesByItem.set(itemKey, list);
+    }
+  }
+
+  const fileCheck = validateFiles(filesByItem);
+  if (!fileCheck.ok) return jsonError(fileCheck.message, 400, requestId);
+
+  const photoCountByItem: Record<string, number> = {};
+  for (const item of sectionDef.items) {
+    const existing = photoRows.filter(
+      (p) => p.section_code === sectionCode && p.item_key === item.key
+    ).length;
+    const incoming = filesByItem.get(item.key)?.length ?? 0;
+    photoCountByItem[item.key] = existing + incoming;
+  }
+
+  const payloadCheck = validateCrewSectionPayloadIrrigation(sectionDef.items, answers, photoCountByItem);
+  if (!payloadCheck.ok) {
+    return NextResponse.json(
+      { ok: false, message: 'Validation failed', errors: payloadCheck.errors },
+      { status: 400 }
+    );
+  }
+
+  const submittedAt = new Date().toISOString();
+  const photoErr = await uploadSectionPhotos(
+    runId,
+    sectionCode,
+    jobId,
+    jobName,
+    filesByItem,
+    staff.id,
+    requestId,
+    false,
+    'fencing'
+  );
+  if (photoErr) return photoErr;
+
+  const { error: upsertErr } = await supabaseAdmin.from('paving_qa_section_submissions').upsert(
+    {
+      run_id: runId,
+      section_code: sectionCode,
+      submission_status: 'submitted',
+      answers,
+      submitted_at: submittedAt,
+      submitted_by: staff.id,
+      updated_at: submittedAt,
+    },
+    { onConflict: 'run_id,section_code' }
+  );
+  if (upsertErr) {
+    console.error('[qa/submit fencing] submission', { requestId, error: normalizeSupabaseError(upsertErr) });
+    return serverError(requestId, 'Failed to save submission');
+  }
+
+  for (const item of sectionDef.items) {
+    const r = (answers[item.key]?.result ?? '').trim();
+    if (r !== 'fail') continue;
+
+    const { data: existing } = await supabaseAdmin
+      .from('paving_qa_issues')
+      .select('id')
+      .eq('run_id', runId)
+      .eq('section_code', sectionCode)
+      .eq('item_key', item.key)
+      .in('status', ['open', 'rectification_required', 'evidence_requested'])
+      .limit(1)
+      .maybeSingle();
+    if (existing) continue;
+
+    if (item.criticalOnFail || item.requireSupervisorOnFail) {
+      const { error: issErr } = await supabaseAdmin.from('paving_qa_issues').insert({
+        run_id: runId,
+        section_code: sectionCode,
+        item_key: item.key,
+        severity: item.criticalOnFail ? 'critical' : 'non_critical',
+        status: 'open',
+        title: item.label,
+        detail: (answers[item.key]?.note ?? '').trim() || null,
+      });
+      if (issErr) console.error('[qa/submit fencing] issue', { requestId, error: normalizeSupabaseError(issErr) });
     }
   }
 

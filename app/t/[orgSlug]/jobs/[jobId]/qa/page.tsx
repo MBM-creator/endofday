@@ -59,6 +59,7 @@ export default function PavingQaHubPage() {
 
   const activePaving = runs.find((x) => x.status === 'active' && (x.qa_type ?? 'paving') === 'paving');
   const activeIrrigation = runs.find((x) => x.status === 'active' && x.qa_type === 'irrigation');
+  const activeFencing = runs.find((x) => x.status === 'active' && x.qa_type === 'fencing');
   const linkedToRealCcProject = Boolean(job?.cc_project_id);
   const applicableTrades = new Set(ccProject?.trades ?? []);
   const hasCcTradeData = Boolean(ccProject);
@@ -66,6 +67,7 @@ export default function PavingQaHubPage() {
   // that excludes paving. When runsError, job is null → not linked → always show.
   const pavingApplicable = !linkedToRealCcProject || applicableTrades.has('paving');
   const irrigationApplicable = applicableTrades.has('irrigation');
+  const fencingApplicable = applicableTrades.has('fencing');
   const hasExistingPavingRuns = runs.length > 0;
 
   return (
@@ -162,7 +164,35 @@ export default function PavingQaHubPage() {
                   </div>
                 )}
 
-                {!pavingApplicable && !irrigationApplicable && (
+                {fencingApplicable && (
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Fencing QA</p>
+                        <p className="mt-1 text-sm text-gray-600">
+                          Evidence run for fencing property protection, set-out, post holes, frame, cladding, gates and final supervisor review.
+                        </p>
+                      </div>
+                      {activeFencing ? (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/fencing/${activeFencing.id}`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Open active Fencing QA run →
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/fencing/new`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Start Fencing QA
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!pavingApplicable && !irrigationApplicable && !fencingApplicable && (
                   <div className="p-4 bg-white border border-gray-200 rounded-lg text-sm text-gray-600">
                     No QA checks are configured for this project&apos;s Client Connect trades yet.
                   </div>
@@ -182,7 +212,9 @@ export default function PavingQaHubPage() {
                       <Link
                         href={(r.qa_type ?? 'paving') === 'irrigation'
                           ? `/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${r.id}`
-                          : `/t/${orgSlug}/jobs/${jobId}/qa/paving/${r.id}`}
+                          : r.qa_type === 'fencing'
+                            ? `/t/${orgSlug}/jobs/${jobId}/qa/fencing/${r.id}`
+                            : `/t/${orgSlug}/jobs/${jobId}/qa/paving/${r.id}`}
                         className="text-sm text-[#698F00] hover:underline"
                       >
                         View

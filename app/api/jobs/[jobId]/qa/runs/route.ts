@@ -4,6 +4,7 @@ import { validateJobForOrg, validateStageBelongsToJob, normalizeSupabaseError } 
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { validateSetupV2 } from '@/lib/paving-qa-v2-setup';
 import { validateIrrigationSetupV1 } from '@/lib/irrigation-qa-v1-setup';
+import { validateFencingSetupV1 } from '@/lib/fencing-qa-v1-setup';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -74,9 +75,9 @@ export async function POST(
     return staffAuth;
   }
 
-  // Only supervisor or admin may create new paving QA runs
+  // Only supervisor or admin may create new QA runs
   if (staffAuth.staff.role !== 'supervisor' && staffAuth.staff.role !== 'admin') {
-    return jsonError('Only supervisors and admins can create paving QA runs', 403, requestId);
+    return jsonError('Only supervisors and admins can create QA runs', 403, requestId);
   }
 
   const v = await validateJobForOrg(jobId, orgSlug, requestId);
@@ -93,10 +94,12 @@ export async function POST(
     return jsonError('Invalid JSON body', 400, requestId);
   }
 
-  const qaType = body.qaType === 'irrigation' ? 'irrigation' : 'paving';
+  const qaType = body.qaType === 'irrigation' || body.qaType === 'fencing' ? body.qaType : 'paving';
   const setupParsed = qaType === 'irrigation'
     ? validateIrrigationSetupV1(body.setup ?? {})
-    : validateSetupV2(body.setup ?? {});
+    : qaType === 'fencing'
+      ? validateFencingSetupV1(body.setup ?? {})
+      : validateSetupV2(body.setup ?? {});
   if (!setupParsed.ok) {
     const first = setupParsed.errors[0];
     return jsonError(first?.message ?? 'Invalid setup', 400, requestId);
@@ -138,7 +141,7 @@ export async function POST(
       status: 'active',
       qa_type: qaType,
       setup,
-      setup_version: qaType === 'irrigation' ? 1 : 2,
+      setup_version: qaType === 'paving' ? 2 : 1,
       started_at: now,
       updated_at: now,
       started_by: staffAuth.staff.id,

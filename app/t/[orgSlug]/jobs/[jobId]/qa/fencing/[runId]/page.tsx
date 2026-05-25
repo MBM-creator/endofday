@@ -1,0 +1,163 @@
+'use client';
+
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
+import { FENCING_FENCE_TYPE_LABELS, type FencingQaSetupV1 } from '@/lib/fencing-qa-v1-types';
+import type { FencingSectionUiState } from '@/lib/fencing-qa-v1-graph';
+
+interface JobContext {
+  cc_project_id?: string | null;
+  cc_client_id?: string | null;
+  cc_project_title_snapshot?: string | null;
+  cc_client_name_snapshot?: string | null;
+}
+
+const STATUS_CONFIG: Record<string, { label: string; pill: string }> = {
+  pending: { label: 'Pending', pill: 'bg-gray-100 text-gray-600' },
+  submitted: { label: 'Submitted', pill: 'bg-blue-50 text-blue-800' },
+  cleared: { label: 'Cleared', pill: 'bg-green-50 text-green-800' },
+  issue_raised: { label: 'Issue raised', pill: 'bg-red-50 text-red-800' },
+  rectification_required: { label: 'Rectification required', pill: 'bg-red-50 text-red-800' },
+  rectified_awaiting_supervisor: { label: 'Awaiting supervisor', pill: 'bg-amber-50 text-amber-900' },
+  supervisor_approved_to_proceed: { label: 'Approved to proceed', pill: 'bg-[#698F00]/10 text-[#4f6f00]' },
+  blocked_by_unresolved_issue: { label: 'Blocked', pill: 'bg-amber-50 text-amber-900' },
+};
+
+function yn(value: boolean): string {
+  return value ? 'Yes' : 'No';
+}
+
+export default function FencingQaRunOverviewPage() {
+  const params = useParams();
+  const orgSlug = (params?.orgSlug as string) ?? '';
+  const jobId = (params?.jobId as string) ?? '';
+  const runId = (params?.runId as string) ?? '';
+
+  const [setup, setSetup] = useState<FencingQaSetupV1 | null>(null);
+  const [sectionStates, setSectionStates] = useState<FencingSectionUiState[]>([]);
+  const [job, setJob] = useState<JobContext | null>(null);
+  const [runStatus, setRunStatus] = useState('');
+  const [finalAt, setFinalAt] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!orgSlug || !jobId || !runId) return;
+    let cancelled = false;
+    fetch(`/api/jobs/${jobId}/qa/runs/${runId}?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((r) => r.json().then((d) => ({ r, d })))
+      .then(({ r, d }) => {
+        if (cancelled) return;
+        if (!r.ok || d.qaType !== 'fencing') {
+          setError(typeof d?.message === 'string' ? d.message : 'Failed to load fencing QA');
+          return;
+        }
+        setJob(d.job && typeof d.job === 'object' ? d.job : null);
+        setRunStatus(String(d.run?.status ?? ''));
+        setFinalAt(d.run?.supervisor_final_approved_at ?? null);
+        setSetup(d.setup as FencingQaSetupV1);
+        setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
+      })
+      .catch(() => setError('Failed to load fencing QA'))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSlug, jobId, runId]);
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8 px-4">
+      <div className="max-w-2xl mx-auto">
+        <Link href={`/t/${orgSlug}/jobs/${jobId}/qa`} className="text-sm text-[#698F00] hover:underline">
+          ← QA checks
+        </Link>
+        <div className="flex items-center gap-3 mt-2">
+          <h1 className="text-2xl font-bold text-gray-900">Fencing QA run</h1>
+          <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-[#698F00]/10 text-[#698F00] border border-[#698F00]/20">v1</span>
+        </div>
+        <p className="text-sm text-gray-600 mt-1">Status: {runStatus || '…'}</p>
+        {job && <ClientConnectJobSummary job={job} compact className="mt-1" emptyText="No Client Connect project linked." />}
+        {finalAt && <p className="text-sm text-[#698F00] mt-1">Final approval recorded.</p>}
+        {error && <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{error}</div>}
+        {loading && <p className="mt-4 text-gray-600">Loading…</p>}
+
+        {!loading && !error && setup && (
+          <div className="mt-6 space-y-4">
+            <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-3">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Setup summary</h2>
+              <dl className="space-y-2 text-sm">
+                <div className="flex flex-col sm:flex-row sm:gap-4">
+                  <dt className="text-gray-500 sm:w-44 shrink-0">Fence type</dt>
+                  <dd className="font-medium text-gray-900">{FENCING_FENCE_TYPE_LABELS[setup.fence_type]}</dd>
+                </div>
+                {[
+                  ['Existing fence removal', yn(setup.existing_fence_removal)],
+                  ['Gate', yn(setup.gate)],
+                  ['Plinth', yn(setup.plinth)],
+                  ['Capping', yn(setup.capping)],
+                  ['Finish/coating', yn(setup.finish_coating)],
+                ].map(([label, value]) => (
+                  <div key={label} className="flex flex-col sm:flex-row sm:gap-4">
+                    <dt className="text-gray-500 sm:w-44 shrink-0">{label}</dt>
+                    <dd className="font-medium text-gray-900">{value}</dd>
+                  </div>
+                ))}
+                {setup.supervisor_notes && (
+                  <div className="flex flex-col sm:flex-row sm:gap-4">
+                    <dt className="text-gray-500 sm:w-44 shrink-0">Supervisor notes</dt>
+                    <dd className="font-medium text-gray-900">{setup.supervisor_notes}</dd>
+                  </div>
+                )}
+              </dl>
+            </div>
+
+            <div>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2">Applicable QA sections ({sectionStates.length})</h2>
+              <ul className="space-y-2">
+                {sectionStates.map((section, index) => {
+                  const cfg = STATUS_CONFIG[section.status] ?? STATUS_CONFIG.pending;
+                  return (
+                    <li key={section.code} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 min-w-0">
+                          <span className="mt-0.5 flex-none w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs font-medium flex items-center justify-center">{index + 1}</span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-gray-900">{section.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">{section.description}</p>
+                          </div>
+                        </div>
+                        <span className={`flex-none px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${cfg.pill}`}>{cfg.label}</span>
+                      </div>
+                      {section.blockedBy && (
+                        <ul className="mt-2 text-xs text-amber-800 list-disc pl-10 space-y-0.5">
+                          {section.blockedBy.map((b) => <li key={`${b.section}:${b.reason}`}>{b.reason}</li>)}
+                        </ul>
+                      )}
+                      {!section.cleared && section.clearReasons.length > 0 && (
+                        <ul className="mt-2 text-xs text-gray-600 list-disc pl-10 space-y-0.5">
+                          {section.clearReasons.slice(0, 4).map((r) => <li key={r}>{r}</li>)}
+                        </ul>
+                      )}
+                      <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/fencing/${runId}/${encodeURIComponent(section.code)}`} className="mt-3 inline-block text-xs text-[#698F00] font-medium hover:underline pl-9">
+                        {section.status === 'blocked_by_unresolved_issue' ? 'View blocking reasons →' : 'Open section →'}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-4 pt-2">
+              <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/fencing/${runId}/supervisor`} className="text-sm font-medium text-[#698F00] hover:underline">Supervisor →</Link>
+              <Link href={`/t/${orgSlug}/jobs/${jobId}/qa`} className="text-sm text-[#698F00] hover:underline">← Back to QA hub</Link>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

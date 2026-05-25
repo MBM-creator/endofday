@@ -89,14 +89,19 @@ function getTemplateMismatchWarning(stage: Stage): string | null {
 
   const isPavingContext = stageName.includes('paving') || ccTrade.includes('paving');
   const isIrrigationContext = stageName.includes('irrigation') || ccTrade.includes('irrigation');
+  const isFencingContext = stageName.includes('fence') || stageName.includes('fencing') || ccTrade.includes('fencing');
   const isPavingTemplate = templateName.includes('paving');
   const isIrrigationTemplate = templateName.includes('irrigation');
+  const isFencingTemplate = templateName.includes('fencing');
 
-  if (isIrrigationContext && isPavingTemplate) {
+  if ((isIrrigationContext || isFencingContext) && isPavingTemplate) {
     return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Paving QA template.`;
   }
-  if (isPavingContext && isIrrigationTemplate) {
+  if ((isPavingContext || isFencingContext) && isIrrigationTemplate) {
     return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Irrigation QA template.`;
+  }
+  if ((isPavingContext || isIrrigationContext) && isFencingTemplate) {
+    return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Fencing QA template.`;
   }
   return null;
 }
@@ -111,6 +116,26 @@ function findSuggestedCcProject(job: Job, projects: CcProject[]): CcProject | nu
     projects.find((project) => normaliseMatchText(project.project_title).includes(jobName)) ??
     null
   );
+}
+
+function qaRunType(run: QaRun): 'paving' | 'irrigation' | 'fencing' {
+  if (run.qa_type === 'irrigation') return 'irrigation';
+  if (run.qa_type === 'fencing') return 'fencing';
+  return 'paving';
+}
+
+function stageQaHref(
+  orgSlug: string,
+  jobId: string,
+  stageId: string,
+  type: 'paving' | 'irrigation' | 'fencing',
+  qaRuns: QaRun[]
+): string {
+  const activeRun = qaRuns.find((run) => run.status === 'active' && qaRunType(run) === type);
+  if (activeRun) {
+    return `/t/${orgSlug}/jobs/${jobId}/qa/${type}/${activeRun.id}`;
+  }
+  return `/t/${orgSlug}/jobs/${jobId}/qa/${type}/new?stageId=${encodeURIComponent(stageId)}`;
 }
 
 export default function JobDetailPage() {
@@ -669,7 +694,7 @@ export default function JobDetailPage() {
     selectedCcProject?.project_title ?? job?.cc_project_title_snapshot ?? '';
   const connectedClientName =
     selectedCcProject?.client_name ?? job?.cc_client_name_snapshot ?? '';
-  const currentQaRuns = qaRuns.filter((run) => run.qa_type === 'irrigation' || run.setup_version === 2);
+  const currentQaRuns = qaRuns.filter((run) => run.qa_type === 'irrigation' || run.qa_type === 'fencing' || run.setup_version === 2);
   const activeQaRun = currentQaRuns.find((run) => run.status === 'active') ?? null;
   const approvedQaRun =
     currentQaRuns.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
@@ -990,6 +1015,7 @@ export default function JobDetailPage() {
                   const templateNameLower = (stage.checklist_templates?.name ?? '').toLowerCase();
                   const isPavingTemplate = templateNameLower.includes('paving');
                   const isIrrigationTemplate = templateNameLower.includes('irrigation');
+                  const isFencingTemplate = templateNameLower.includes('fencing');
                   return (
                     <li
                       key={stage.id}
@@ -1065,22 +1091,32 @@ export default function JobDetailPage() {
 
                       {isPavingTemplate && !mismatchWarning && (
                         <div className="mt-2">
-                          <a
-                            href={`/t/${orgSlug}/jobs/${jobId}/qa`}
+                          <Link
+                            href={stageQaHref(orgSlug, jobId, stage.id, 'paving', qaRuns)}
                             className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
                           >
                             Open Paving QA
-                          </a>
+                          </Link>
                         </div>
                       )}
                       {isIrrigationTemplate && !mismatchWarning && (
                         <div className="mt-2">
-                          <a
-                            href={`/t/${orgSlug}/jobs/${jobId}/qa`}
+                          <Link
+                            href={stageQaHref(orgSlug, jobId, stage.id, 'irrigation', qaRuns)}
                             className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
                           >
                             Open Irrigation QA
-                          </a>
+                          </Link>
+                        </div>
+                      )}
+                      {isFencingTemplate && !mismatchWarning && (
+                        <div className="mt-2">
+                          <Link
+                            href={stageQaHref(orgSlug, jobId, stage.id, 'fencing', qaRuns)}
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
+                          >
+                            Open Fencing QA
+                          </Link>
                         </div>
                       )}
                       {stage.checklist_templates?.checklist_template_items &&

@@ -5,6 +5,7 @@ import { loadQaRunBundle } from '@/lib/qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
 import { v2RunHasIncompleteEvidence } from '@/lib/paving-qa-v2-graph';
 import { irrigationRunHasIncompleteEvidence } from '@/lib/irrigation-qa-v1-graph';
+import { fencingRunHasIncompleteEvidence } from '@/lib/fencing-qa-v1-graph';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -307,6 +308,16 @@ export async function GET(
         );
         warningMessage =
           'Irrigation QA evidence is incomplete. Review the irrigation QA run before completing today\'s report.';
+      } else if (bundle.ok && bundle.qaType === 'fencing') {
+        qaType = 'fencing';
+        hasIncomplete = fencingRunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'Fencing QA evidence is incomplete. Review the fencing QA run before completing today\'s report.';
       } else if (bundle.ok && bundle.version === 1) {
         hasIncomplete = activeRunHasIncompleteEvidence(
           bundle.setup,

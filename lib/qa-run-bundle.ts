@@ -4,9 +4,11 @@ import type { PavingQaSetup as PavingQaSetupV1 } from '@/lib/paving-qa-v1-types'
 import type { PavingQaSetupV2 } from '@/lib/paving-qa-v2-types';
 import { validateIrrigationSetupV1 } from '@/lib/irrigation-qa-v1-setup';
 import type { IrrigationQaSetupV1 } from '@/lib/irrigation-qa-v1-types';
+import { validateFencingSetupV1 } from '@/lib/fencing-qa-v1-setup';
+import type { FencingQaSetupV1 } from '@/lib/fencing-qa-v1-types';
 import type { IssueSnapshot, SubmissionSnapshot } from '@/lib/paving-qa-v1-graph';
 
-export type QaType = 'paving' | 'irrigation';
+export type QaType = 'paving' | 'irrigation' | 'fencing';
 
 export type QaRunRow = {
   id: string;
@@ -48,10 +50,17 @@ export type IrrigationRunBundleV1 = BundleBase & {
   setup: IrrigationQaSetupV1;
 };
 
+export type FencingRunBundleV1 = BundleBase & {
+  qaType: 'fencing';
+  version: 1;
+  setup: FencingQaSetupV1;
+};
+
 export type QaRunBundle =
   | PavingRunBundleV1
   | PavingRunBundleV2
   | IrrigationRunBundleV1
+  | FencingRunBundleV1
   | { ok: false; code: 'NOT_FOUND' };
 
 export async function loadQaRunBundle(runId: string, jobId: string): Promise<QaRunBundle> {
@@ -68,7 +77,13 @@ export async function loadQaRunBundle(runId: string, jobId: string): Promise<QaR
 
   const runRow = {
     ...(run as Omit<QaRunRow, 'qa_type'> & { qa_type?: string | null }),
-    qa_type: ((run as { qa_type?: string | null }).qa_type === 'irrigation' ? 'irrigation' : 'paving') as QaType,
+    qa_type: (
+      (run as { qa_type?: string | null }).qa_type === 'irrigation'
+        ? 'irrigation'
+        : (run as { qa_type?: string | null }).qa_type === 'fencing'
+          ? 'fencing'
+          : 'paving'
+    ) as QaType,
   } satisfies QaRunRow;
 
   const { data: subRows } = await supabaseAdmin
@@ -110,6 +125,21 @@ export async function loadQaRunBundle(runId: string, jobId: string): Promise<QaR
     return {
       ok: true,
       qaType: 'irrigation',
+      version: 1,
+      run: runRow,
+      setup: parsed.setup,
+      submissions,
+      issues,
+      photoRows: photos,
+    };
+  }
+
+  if (runRow.qa_type === 'fencing') {
+    const parsed = validateFencingSetupV1(run.setup);
+    if (!parsed.ok) return { ok: false, code: 'NOT_FOUND' };
+    return {
+      ok: true,
+      qaType: 'fencing',
       version: 1,
       run: runRow,
       setup: parsed.setup,

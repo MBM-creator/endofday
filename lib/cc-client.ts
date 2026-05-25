@@ -5,6 +5,7 @@ export type CcProjectTrade =
   | 'paving'
   | 'concrete'
   | 'carpentry_decking'
+  | 'fencing'
   | 'irrigation'
   | 'planting'
   | 'electrical'
@@ -80,6 +81,7 @@ function isCcProjectTrade(value: unknown): value is CcProjectTrade {
     value === 'paving' ||
     value === 'concrete' ||
     value === 'carpentry_decking' ||
+    value === 'fencing' ||
     value === 'irrigation' ||
     value === 'planting' ||
     value === 'electrical' ||

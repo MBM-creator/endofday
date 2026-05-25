@@ -2,6 +2,7 @@ import type { ItemResult, PavingQaSetup, PavingSectionCode } from './paving-qa-v
 import { getSectionItemsForSetup } from './paving-qa-v1-catalog';
 import type { V2CatalogueItem } from './paving-qa-v2-catalog';
 import type { IrrigationCatalogueItem } from './irrigation-qa-v1-catalog';
+import type { FencingCatalogueItem } from './fencing-qa-v1-catalog';
 
 // v2 valid results — 'not_required' replaces 'na'; all stored in answers JSONB
 const V2_VALID_RESULTS = ['pass', 'fail', 'not_required'] as const;
@@ -88,7 +89,7 @@ export function validateCrewSectionPayloadV2(
 }
 
 export function validateCrewSectionPayloadIrrigation(
-  items: IrrigationCatalogueItem[],
+  items: IrrigationCatalogueItem[] | FencingCatalogueItem[],
   answers: Record<string, { result?: string; note?: string }>,
   photoCountByItem: Record<string, number>
 ): { ok: true } | { ok: false; errors: string[] } {

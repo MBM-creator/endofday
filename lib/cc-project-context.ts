@@ -4,7 +4,7 @@ type JobWithClientConnect = {
   cc_project_id?: string | null;
 };
 
-export type QaCheckType = 'paving' | 'irrigation';
+export type QaCheckType = 'paving' | 'irrigation' | 'fencing';
 
 export function getApplicableQaChecks(project: CcProject | null): QaCheckType[] {
   if (!project) return ['paving'];
@@ -12,6 +12,7 @@ export function getApplicableQaChecks(project: CcProject | null): QaCheckType[] 
   const checks: QaCheckType[] = [];
   if (trades.has('paving')) checks.push('paving');
   if (trades.has('irrigation')) checks.push('irrigation');
+  if (trades.has('fencing')) checks.push('fencing');
   return checks;
 }
 

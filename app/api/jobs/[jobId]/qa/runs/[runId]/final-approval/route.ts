@@ -7,6 +7,7 @@ import { loadQaRunBundle } from '@/lib/qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
 import { computeV2SectionUiStates } from '@/lib/paving-qa-v2-graph';
 import { getIrrigationFinalApprovalBlockers } from '@/lib/irrigation-qa-v1-graph';
+import { getFencingFinalApprovalBlockers } from '@/lib/fencing-qa-v1-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -89,6 +90,32 @@ export async function POST(
         {
           ok: false,
           message: 'Irrigation QA cannot be final-approved until all applicable sections and required evidence are cleared.',
+          incompleteSections: blockers.map((s) => ({
+            code: s.code,
+            title: s.title,
+            status: s.status,
+            reasons: s.reasons,
+          })),
+        },
+        { status: 409 }
+      );
+      res.headers.set('x-request-id', requestId);
+      return res;
+    }
+  }
+
+  if (typedBundle.qaType === 'fencing') {
+    const blockers = getFencingFinalApprovalBlockers(
+      typedBundle.setup,
+      typedBundle.submissions,
+      typedBundle.photoRows,
+      typedBundle.issues
+    );
+    if (blockers.length > 0) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          message: 'Fencing QA cannot be final-approved until all applicable sections and required evidence are cleared.',
           incompleteSections: blockers.map((s) => ({
             code: s.code,
             title: s.title,

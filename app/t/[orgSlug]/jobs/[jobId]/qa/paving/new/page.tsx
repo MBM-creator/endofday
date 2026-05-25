@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import {
   PAVING_INSTALL_METHOD_LABELS_V2,
@@ -26,8 +26,10 @@ const WET_BED_METHODS: PavingInstallMethodV2[] = ['crushed_rock_wet_bed', 'concr
 export default function NewPavingQaRunPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
   const jobId = (params?.jobId as string) ?? '';
+  const stageId = searchParams.get('stageId')?.trim() || null;
 
   // Role check — purely informational; API enforces the real guard
   const [role, setRole] = useState<string | null>(null);
@@ -120,7 +122,7 @@ export default function NewPavingQaRunPage() {
       const res = await fetch(`/api/jobs/${jobId}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ setup: validation.setup }),
+        body: JSON.stringify({ setup: validation.setup, stageId }),
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
