@@ -92,10 +92,64 @@ export default function JobsListPage() {
     }
   }
 
+  function normalise(value: string | null | undefined): string {
+    return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  }
+
+  function ccProjectForJob(job: Job): CcProject | null {
+    if (job.cc_project_id) {
+      return ccProjects.find((candidate) => candidate.project_id === job.cc_project_id) ?? null;
+    }
+
+    const title = normalise(job.cc_project_title_snapshot ?? job.name);
+    if (!title) return null;
+
+    const matches = ccProjects.filter((candidate) => normalise(candidate.project_title) === title);
+    return matches.length === 1 ? matches[0] : null;
+  }
+
+  function jobPriority(job: Job): number {
+    if (job.cc_project_id && job.cc_client_name_snapshot) return 4;
+    if (job.cc_project_id) return 3;
+    if (job.cc_project_title_snapshot || job.cc_client_name_snapshot) return 2;
+    return 1;
+  }
+
+  const visibleJobs = React.useMemo(() => {
+    const byKey = new Map<string, Job>();
+
+    for (const job of jobs) {
+      const project = ccProjectForJob(job);
+      const key = project
+        ? `cc:${project.project_id}`
+        : job.cc_project_title_snapshot || job.cc_client_name_snapshot
+          ? `snapshot:${normalise(job.cc_project_title_snapshot)}:${normalise(job.cc_client_name_snapshot)}`
+          : `job:${job.id}`;
+      const existing = byKey.get(key);
+      if (!existing) {
+        byKey.set(key, job);
+        continue;
+      }
+
+      const existingPriority = jobPriority(existing);
+      const nextPriority = jobPriority(job);
+      if (
+        nextPriority > existingPriority ||
+        (nextPriority === existingPriority && new Date(job.created_at).getTime() > new Date(existing.created_at).getTime())
+      ) {
+        byKey.set(key, job);
+      }
+    }
+
+    return Array.from(byKey.values()).sort((a, b) => {
+      const aTime = new Date(a.created_at).getTime();
+      const bTime = new Date(b.created_at).getTime();
+      return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+    });
+  }, [jobs, ccProjects]);
+
   function clientConnectLabel(job: Job): { title: string; client: string | null; address: string | null; isLinked: boolean } {
-    const project = job.cc_project_id
-      ? ccProjects.find((candidate) => candidate.project_id === job.cc_project_id) ?? null
-      : null;
+    const project = ccProjectForJob(job);
 
     return {
       title: project?.project_title ?? job.cc_project_title_snapshot ?? job.name,
@@ -130,15 +184,15 @@ export default function JobsListPage() {
           <p className="text-gray-600">Loading jobs…</p>
         )}
 
-        {!loading && !error && jobs.length === 0 && (
+        {!loading && !error && visibleJobs.length === 0 && (
           <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
             No jobs yet.
           </div>
         )}
 
-        {!loading && !error && jobs.length > 0 && (
+        {!loading && !error && visibleJobs.length > 0 && (
           <ul className="space-y-3">
-            {jobs.map((job) => {
+            {visibleJobs.map((job) => {
               const ccLabel = clientConnectLabel(job);
               return (
                 <li key={job.id}>
