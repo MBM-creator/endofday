@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
 import type { CcProject } from '@/lib/cc-client';
+import { ccClientDisplayName } from '@/lib/cc-client-display';
 
 interface Job {
   id: string;
@@ -163,6 +164,7 @@ export default function JobDetailPage() {
   const [isSubmittingStage, setIsSubmittingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [stageIdSettingActive, setStageIdSettingActive] = useState<string | null>(null);
+  const [stageIdMoving, setStageIdMoving] = useState<string | null>(null);
   const [activeStageError, setActiveStageError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
@@ -484,6 +486,47 @@ export default function JobDetailPage() {
     }
   }
 
+  async function moveStage(stageId: string, direction: 'up' | 'down') {
+    if (!orgSlug || stageIdMoving) return;
+    const fromIndex = stages.findIndex((stage) => stage.id === stageId);
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= stages.length) return;
+
+    const nextStages = [...stages];
+    const movingStage = nextStages[fromIndex];
+    const swappedStage = nextStages[toIndex];
+    nextStages[fromIndex] = swappedStage;
+    nextStages[toIndex] = movingStage;
+    const reorderedStages = nextStages.map((stage, index) => ({ ...stage, sort_order: index }));
+
+    setActiveStageError(null);
+    setStageIdMoving(stageId);
+    setStages(reorderedStages);
+
+    try {
+      const updates = [movingStage.id, swappedStage.id].map((id) => {
+        const next = reorderedStages.find((stage) => stage.id === id);
+        return fetch(`/api/stages/${id}?orgSlug=${encodeURIComponent(orgSlug)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sortOrder: next?.sort_order ?? 0 }),
+        });
+      });
+      const responses = await Promise.all(updates);
+      const failed = responses.find((res) => !res.ok);
+      if (failed) {
+        const data = await failed.json().catch(() => null);
+        throw new Error(typeof data?.message === 'string' ? data.message : 'Failed to move stage');
+      }
+      await refetchStages();
+    } catch (err) {
+      setActiveStageError(err instanceof Error ? err.message : 'Failed to move stage');
+      await refetchStages();
+    } finally {
+      setStageIdMoving(null);
+    }
+  }
+
   async function handleAddStage(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = stageName.trim();
@@ -536,7 +579,7 @@ export default function JobDetailPage() {
             cc_project_id: selected.project_id,
             cc_client_id: selected.client_id,
             cc_project_title_snapshot: selected.project_title,
-            cc_client_name_snapshot: selected.client_name,
+            cc_client_name_snapshot: ccClientDisplayName(selected),
           }
           : {
             cc_project_id: null,
@@ -693,7 +736,7 @@ export default function JobDetailPage() {
   const connectedProjectTitle =
     selectedCcProject?.project_title ?? job?.cc_project_title_snapshot ?? '';
   const connectedClientName =
-    selectedCcProject?.client_name ?? job?.cc_client_name_snapshot ?? '';
+    selectedCcProject ? ccClientDisplayName(selectedCcProject) : job?.cc_client_name_snapshot ?? '';
   const currentQaRuns = qaRuns.filter((run) => run.qa_type === 'irrigation' || run.qa_type === 'fencing' || run.setup_version === 2);
   const activeQaRun = currentQaRuns.find((run) => run.status === 'active') ?? null;
   const approvedQaRun =
@@ -781,14 +824,14 @@ export default function JobDetailPage() {
                       setCcSelectedProjectId(nextProjectId);
                       const nextProject = ccProjects.find((project) => project.project_id === nextProjectId);
                       setManualCcProjectTitle(nextProject?.project_title ?? '');
-                      setManualCcClientName(nextProject?.client_name ?? '');
+                      setManualCcClientName(nextProject ? ccClientDisplayName(nextProject) : '');
                     }}
                     disabled={ccProjectsLoading || ccMappingSaving || !!ccProjectsError}
                   >
                     <option value="">Not linked</option>
                     {ccProjects.map((project) => (
                       <option key={project.project_id} value={project.project_id}>
-                        {project.project_title} — {project.client_name}
+                        {project.project_title} — {ccClientDisplayName(project)}
                         {project.site_address ? ` — ${project.site_address}` : ''} ({project.status})
                       </option>
                     ))}
@@ -1006,9 +1049,10 @@ export default function JobDetailPage() {
               <p className="text-gray-600">No stages yet.</p>
             ) : (
               <ul className="space-y-3">
-                {stages.map((stage) => {
+                {stages.map((stage, stageIndex) => {
                   const isActive = job?.active_stage_id === stage.id;
                   const isSetting = stageIdSettingActive === stage.id;
+                  const isMoving = stageIdMoving === stage.id;
                   const isUpdatingTemplate = stageIdUpdatingTemplate === stage.id;
                   const selectorDisabled = templatesLoading || !!templatesError || isUpdatingTemplate;
                   const mismatchWarning = getTemplateMismatchWarning(stage);
@@ -1025,34 +1069,57 @@ export default function JobDetailPage() {
                           : 'bg-white border-gray-200'
                       }`}
                     >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-gray-900">{stage.name}</span>
-                        {stage.created_at && (
-                          <span className="text-sm text-gray-500">
-                            {formatDate(stage.created_at)}
-                          </span>
-                        )}
-                        {isActive && (
-                          <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
-                            Active
-                          </span>
-                        )}
-                        {stage.cc_section_id && (
-                          <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
-                            Client Connect section
-                            {stage.cc_section_trade ? ` · ${stage.cc_section_trade.replace('_', ' ')}` : ''}
-                          </span>
-                        )}
-                        {!isActive && (
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-gray-900">{stage.name}</span>
+                          {stage.created_at && (
+                            <span className="text-sm text-gray-500">
+                              {formatDate(stage.created_at)}
+                            </span>
+                          )}
+                          {isActive && (
+                            <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
+                              Active
+                            </span>
+                          )}
+                          {stage.cc_section_id && (
+                            <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                              Client Connect section
+                              {stage.cc_section_trade ? ` · ${stage.cc_section_trade.replace('_', ' ')}` : ''}
+                            </span>
+                          )}
+                          {!isActive && (
+                            <button
+                              type="button"
+                              onClick={() => setActiveStage(stage.id)}
+                              disabled={!!stageIdSettingActive}
+                              className="text-sm text-[#698F00] hover:underline font-medium disabled:opacity-50"
+                            >
+                              {isSetting ? 'Setting…' : 'Set as active'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
                           <button
                             type="button"
-                            onClick={() => setActiveStage(stage.id)}
-                            disabled={!!stageIdSettingActive}
-                            className="text-sm text-[#698F00] hover:underline font-medium disabled:opacity-50"
+                            onClick={() => moveStage(stage.id, 'up')}
+                            disabled={stageIndex === 0 || !!stageIdMoving}
+                            className="px-2 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label={`Move ${stage.name} up`}
                           >
-                            {isSetting ? 'Setting…' : 'Set as active'}
+                            Up
                           </button>
-                        )}
+                          <button
+                            type="button"
+                            onClick={() => moveStage(stage.id, 'down')}
+                            disabled={stageIndex === stages.length - 1 || !!stageIdMoving}
+                            className="px-2 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label={`Move ${stage.name} down`}
+                          >
+                            Down
+                          </button>
+                          {isMoving && <span className="text-xs text-gray-500">Moving…</span>}
+                        </div>
                       </div>
                       <div className="mt-3 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">

@@ -139,7 +139,7 @@ export async function PATCH(
   const validation = await validateStageForOrg(stageId, orgSlug, requestId);
   if (validation instanceof NextResponse) return validation;
 
-  let body: { checklistTemplateId?: string | null };
+  let body: { checklistTemplateId?: string | null; sortOrder?: number };
   try {
     const raw = await request.json();
     body = typeof raw === 'object' && raw !== null ? raw : {};
@@ -149,8 +149,10 @@ export async function PATCH(
     return res;
   }
 
-  if (!('checklistTemplateId' in body)) {
-    return jsonError('checklistTemplateId is required', 400, requestId);
+  const hasChecklistTemplateId = 'checklistTemplateId' in body;
+  const hasSortOrder = 'sortOrder' in body;
+  if (!hasChecklistTemplateId && !hasSortOrder) {
+    return jsonError('checklistTemplateId or sortOrder is required', 400, requestId);
   }
 
   const checklistTemplateIdRaw = body.checklistTemplateId;
@@ -159,7 +161,7 @@ export async function PATCH(
       ? null
       : String(checklistTemplateIdRaw).trim() || null;
 
-  if (checklistTemplateId !== null) {
+  if (hasChecklistTemplateId && checklistTemplateId !== null) {
     if (!isValidUuid(checklistTemplateId)) {
       return jsonError('checklistTemplateId must be a valid UUID or null', 400, requestId);
     }
@@ -193,9 +195,20 @@ export async function PATCH(
     }
   }
 
+  const updates: { checklist_template_id?: string | null; sort_order?: number } = {};
+  if (hasChecklistTemplateId) {
+    updates.checklist_template_id = checklistTemplateId;
+  }
+  if (hasSortOrder) {
+    if (typeof body.sortOrder !== 'number' || !Number.isInteger(body.sortOrder) || body.sortOrder < 0) {
+      return jsonError('sortOrder must be a non-negative integer', 400, requestId);
+    }
+    updates.sort_order = body.sortOrder;
+  }
+
   const { error: updateError } = await supabaseAdmin
     .from('stages')
-    .update({ checklist_template_id: checklistTemplateId })
+    .update(updates)
     .eq('id', stageId);
 
   if (updateError) {

@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { fetchCcProjects } from '@/lib/cc-client';
+import { ccClientDisplayName } from '@/lib/cc-client-display';
 import { syncCcProjectStagesForJob } from '@/lib/sync-cc-project-stages';
 
 export const runtime = 'nodejs';
@@ -249,7 +250,7 @@ export async function PATCH(
     });
     cc_client_id = match.client_id;
     cc_project_title_snapshot = match.project_title;
-    cc_client_name_snapshot = match.client_name;
+    cc_client_name_snapshot = ccClientDisplayName(match);
     try {
       await syncCcProjectStagesForJob(jobId, match, requestId);
     } catch (err) {

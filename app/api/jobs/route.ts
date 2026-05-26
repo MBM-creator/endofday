@@ -3,6 +3,7 @@ import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
 import { fetchCcProjects } from '@/lib/cc-client';
 import type { CcProject } from '@/lib/cc-client';
+import { ccClientDisplayName } from '@/lib/cc-client-display';
 import { syncCcProjectStagesForJob } from '@/lib/sync-cc-project-stages';
 import { randomUUID } from 'crypto';
 
@@ -209,7 +210,7 @@ export async function POST(request: NextRequest) {
       cc_project_id: ccProject?.project_id ?? null,
       cc_client_id: ccProject?.client_id ?? null,
       cc_project_title_snapshot: ccProject?.project_title ?? null,
-      cc_client_name_snapshot: ccProject?.client_name ?? null,
+      cc_client_name_snapshot: ccProject ? ccClientDisplayName(ccProject) : null,
     })
     .select('id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot')
     .single();

@@ -4,6 +4,7 @@ import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type { CcProject } from '@/lib/cc-client';
+import { ccClientDisplayName } from '@/lib/cc-client-display';
 
 type CreateMode = 'client-connect' | 'manual';
 
@@ -178,7 +179,7 @@ export default function NewJobPage() {
                   {!ccLoading && ccProjects.length === 0 && <option value="">No Client Connect projects available</option>}
                   {!ccLoading && ccProjects.map((project) => (
                     <option key={project.project_id} value={project.project_id}>
-                      {project.project_title} — {project.client_name}
+                      {project.project_title} — {ccClientDisplayName(project)}
                       {project.site_address ? ` — ${project.site_address}` : ''}
                     </option>
                   ))}
@@ -188,10 +189,7 @@ export default function NewJobPage() {
                   <div className="mt-4 space-y-3 text-sm">
                     <div>
                       <p className="font-medium text-gray-900">{selectedProject.project_title}</p>
-                      <p className="text-gray-600">{selectedProject.client_name}</p>
-                      {selectedProject.client_contact && (
-                        <p className="text-gray-600">{selectedProject.client_contact}</p>
-                      )}
+                      <p className="text-gray-600">{ccClientDisplayName(selectedProject)}</p>
                       {selectedProject.site_address && (
                         <p className="text-gray-600">{selectedProject.site_address}</p>
                       )}
