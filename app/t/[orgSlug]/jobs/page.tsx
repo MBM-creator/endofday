@@ -120,11 +120,8 @@ export default function JobsListPage() {
 
     for (const job of jobs) {
       const project = ccProjectForJob(job);
-      const key = project
-        ? `cc:${project.project_id}`
-        : job.cc_project_title_snapshot || job.cc_client_name_snapshot
-          ? `snapshot:${normalise(job.cc_project_title_snapshot)}:${normalise(job.cc_client_name_snapshot)}`
-          : `job:${job.id}`;
+      const titleKey = normalise(project?.project_title ?? job.cc_project_title_snapshot ?? job.name);
+      const key = titleKey ? `title:${titleKey}` : project ? `cc:${project.project_id}` : `job:${job.id}`;
       const existing = byKey.get(key);
       if (!existing) {
         byKey.set(key, job);
