@@ -115,10 +115,19 @@ export default function JobsListPage() {
     return 1;
   }
 
+  function isTestJob(job: Job): boolean {
+    const name = normalise(job.name);
+    const title = normalise(job.cc_project_title_snapshot);
+    const client = normalise(job.cc_client_name_snapshot);
+    return /^test(?:\s|$)/.test(name) || /^test(?:\s|$)/.test(title) || /^test client/.test(client);
+  }
+
   const visibleJobs = React.useMemo(() => {
     const byKey = new Map<string, Job>();
 
     for (const job of jobs) {
+      if (isTestJob(job)) continue;
+
       const project = ccProjectForJob(job);
       const titleKey = normalise(project?.project_title ?? job.cc_project_title_snapshot ?? job.name);
       const key = titleKey ? `title:${titleKey}` : project ? `cc:${project.project_id}` : `job:${job.id}`;
