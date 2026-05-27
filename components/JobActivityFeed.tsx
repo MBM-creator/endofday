@@ -34,6 +34,9 @@ interface JobNote {
   job_id: string;
   stage_id: string | null;
   stage_name: string | null;
+  report_date: string | null;
+  primary_context_type: string | null;
+  primary_context_id: string | null;
   author_staff_profile_id: string | null;
   author_name: string;
   body: string;
@@ -80,6 +83,21 @@ function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes <= 0) return '';
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(bytes > 10 * 1024 * 1024 ? 0 : 1)} MB`;
+}
+
+function todayDateInputValue(): string {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function formatReportDate(value: string | null): string {
+  if (!value) return 'No date';
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return value;
+  return new Date(year, month - 1, day).toLocaleDateString(undefined, { dateStyle: 'medium' });
 }
 
 function videoDuration(file: File): Promise<number | null> {
@@ -145,6 +163,7 @@ export function JobActivityFeed({
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [stageId, setStageId] = useState<string>(activeStageId ?? '');
+  const [reportDate, setReportDate] = useState(todayDateInputValue);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -209,6 +228,7 @@ export function JobActivityFeed({
       body: JSON.stringify({
         body: trimmed,
         stageId: stageId || null,
+        reportDate,
         hasAttachmentIntent: Boolean(videoFile),
       }),
     });
@@ -302,6 +322,7 @@ export function JobActivityFeed({
       }
 
       setBody('');
+      setReportDate(todayDateInputValue());
       setVideoFile(null);
       setUploadPct(null);
       if (fileRef.current) fileRef.current.value = '';
@@ -366,6 +387,19 @@ export function JobActivityFeed({
             </select>
           </div>
         )}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Date</label>
+          <input
+            type="date"
+            value={reportDate}
+            onChange={(e) => setReportDate(e.target.value)}
+            disabled={submitting}
+            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-[#698F00] disabled:bg-gray-100"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Used for the note/video schedule link and daily timeline filters.
+          </p>
+        </div>
         <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Note</label>
           <textarea
@@ -440,6 +474,17 @@ export function JobActivityFeed({
                     {formatDateTime(note.created_at)}
                     {note.stage_name ? ` · ${note.stage_name}` : ''}
                   </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <span className="rounded-full bg-lime-50 px-2 py-0.5 text-[11px] font-medium text-lime-800 ring-1 ring-lime-200">
+                      Lives in {note.stage_name ? 'stage' : 'job'}
+                    </span>
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-800 ring-1 ring-sky-200">
+                      {formatReportDate(note.report_date)}
+                    </span>
+                    <span className="rounded-full bg-gray-50 px-2 py-0.5 text-[11px] font-medium text-gray-700 ring-1 ring-gray-200">
+                      Crew: {note.author_name}
+                    </span>
+                  </div>
                 </div>
                 {note.can_delete && (
                   <button
@@ -467,7 +512,9 @@ export function JobActivityFeed({
                         className="w-full rounded-lg border border-gray-200 bg-black"
                       />
                       <p className="mt-1 text-xs text-gray-500">
-                        {[attachment.file_name, formatBytes(attachment.file_size_bytes)].filter(Boolean).join(' · ')}
+                        {[attachment.file_name, formatBytes(attachment.file_size_bytes), formatReportDate(note.report_date)]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </p>
                     </div>
                   ))}

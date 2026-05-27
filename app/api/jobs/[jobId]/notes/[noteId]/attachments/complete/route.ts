@@ -8,6 +8,7 @@ import {
   JOB_NOTE_VIDEO_MAX_SECONDS,
   isAllowedJobNoteVideoMimeType,
 } from '@/lib/job-notes';
+import { linkJobNoteAttachmentContext } from '@/lib/context-links';
 
 export const runtime = 'nodejs';
 
@@ -91,7 +92,7 @@ export async function POST(
 
   const { data: note, error: noteError } = await supabaseAdmin
     .from('job_notes')
-    .select('id, job_id')
+    .select('id, job_id, stage_id, report_date, primary_context_type, primary_context_id')
     .eq('id', noteId)
     .eq('job_id', jobId)
     .is('deleted_at', null)
@@ -114,6 +115,8 @@ export async function POST(
       file_size_bytes: Math.round(fileSizeBytes),
       duration_seconds: durationSeconds != null && Number.isFinite(durationSeconds) ? durationSeconds : null,
       uploaded_by: staffAuth.staff.id,
+      primary_context_type: note.primary_context_type ?? 'job_note',
+      primary_context_id: note.primary_context_id ?? noteId,
     })
     .select('id, note_id, job_id, storage_path, media_type, mime_type, file_name, file_size_bytes, duration_seconds, created_at')
     .single();
@@ -123,6 +126,20 @@ export async function POST(
     console.error('[job note attachment complete] insert failed:', { requestId, supabaseError: supabaseErr });
     await supabaseAdmin.storage.from(BUCKET).remove([storagePath]);
     return serverError(requestId, supabaseErr.code ?? 'NOTE_ATTACHMENT_INSERT', 'Failed to save video');
+  }
+
+  try {
+    await linkJobNoteAttachmentContext({
+      attachmentId: attachment.id,
+      noteId,
+      organisationId: validation.organisationId,
+      jobId,
+      stageId: note.stage_id ?? null,
+      reportDate: note.report_date ?? null,
+      staffProfileId: staffAuth.staff.id,
+    });
+  } catch (linkError) {
+    console.error('[job note attachment complete] context link failed:', { requestId, linkError });
   }
 
   const res = NextResponse.json({ ok: true, attachment }, { status: 201 });

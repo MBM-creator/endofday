@@ -4,6 +4,7 @@ import { guardStaffApi } from '@/lib/guard-staff-api';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { validateJobForOrg, validateStageBelongsToJob, normalizeSupabaseError } from '@/lib/job-org-validation';
 import { JOB_NOTE_MAX_BODY_LENGTH } from '@/lib/job-notes';
+import { linkJobNoteContext } from '@/lib/context-links';
 
 export const runtime = 'nodejs';
 
@@ -23,6 +24,12 @@ function serverError(requestId: string, errorCode: string, message = 'Internal s
 
 function canDeleteNote(role: string, staffId: string, authorId: string | null): boolean {
   return role === 'supervisor' || role === 'admin' || staffId === authorId;
+}
+
+function normalizeReportDate(value: unknown): string {
+  const raw = value == null || String(value).trim() === '' ? new Date().toISOString().slice(0, 10) : String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return new Date().toISOString().slice(0, 10);
+  return raw;
 }
 
 export async function GET(
@@ -48,6 +55,9 @@ export async function GET(
       id,
       job_id,
       stage_id,
+      report_date,
+      primary_context_type,
+      primary_context_id,
       author_staff_profile_id,
       body,
       created_at,
@@ -119,6 +129,9 @@ export async function GET(
       job_id: note.job_id,
       stage_id: note.stage_id,
       stage_name: stage?.name ?? null,
+      report_date: note.report_date ?? null,
+      primary_context_type: note.primary_context_type ?? null,
+      primary_context_id: note.primary_context_id ?? null,
       author_staff_profile_id: note.author_staff_profile_id,
       author_name: profile?.full_name ?? 'Unknown staff member',
       body: note.body ?? '',
@@ -151,7 +164,7 @@ export async function POST(
   const validation = await validateJobForOrg(jobId, orgSlug, requestId);
   if (validation instanceof NextResponse) return validation;
 
-  let body: { body?: unknown; stageId?: unknown; hasAttachmentIntent?: unknown };
+  let body: { body?: unknown; stageId?: unknown; reportDate?: unknown; hasAttachmentIntent?: unknown };
   try {
     const raw = await request.json();
     body = typeof raw === 'object' && raw !== null ? raw : {};
@@ -161,6 +174,7 @@ export async function POST(
 
   const noteBody = String(body.body ?? '').trim();
   const stageId = body.stageId == null || String(body.stageId).trim() === '' ? null : String(body.stageId).trim();
+  const reportDate = normalizeReportDate(body.reportDate);
   const hasAttachmentIntent = body.hasAttachmentIntent === true;
   if (!noteBody && !hasAttachmentIntent) {
     return jsonError('Add a note or video before posting', 400, requestId);
@@ -177,16 +191,34 @@ export async function POST(
     .insert({
       job_id: jobId,
       stage_id: stageId,
+      report_date: reportDate,
+      primary_context_type: stageId ? 'stage' : 'job',
+      primary_context_id: stageId || jobId,
       author_staff_profile_id: staffAuth.staff.id,
       body: noteBody || null,
     })
-    .select('id, job_id, stage_id, author_staff_profile_id, body, created_at, updated_at')
+    .select('id, job_id, stage_id, report_date, primary_context_type, primary_context_id, author_staff_profile_id, body, created_at, updated_at')
     .single();
 
   if (insertError || !note) {
     const supabaseErr = normalizeSupabaseError(insertError ?? null);
     console.error('[api/jobs/[jobId]/notes] POST failed:', { requestId, supabaseError: supabaseErr });
     return serverError(requestId, supabaseErr.code ?? 'NOTE_INSERT', 'Failed to save note');
+  }
+
+  try {
+    await linkJobNoteContext({
+      noteId: note.id,
+      organisationId: validation.organisationId,
+      jobId,
+      stageId,
+      reportDate,
+      staffProfileId: staffAuth.staff.id,
+      ccProjectId: validation.job.cc_project_id,
+      ccJobId: null,
+    });
+  } catch (linkError) {
+    console.error('[api/jobs/[jobId]/notes] context link failed:', { requestId, linkError });
   }
 
   const res = NextResponse.json({ ok: true, note }, { status: 201 });
