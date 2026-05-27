@@ -132,12 +132,22 @@ function optionalNumber(value: unknown, fieldName: string): number | null {
   return value;
 }
 
-function optionalTrade(value: unknown, fieldName: string): CcProjectTrade | null {
+function normalizeTrade(value: unknown): CcProjectTrade | null {
   if (value == null) return null;
-  if (!isCcProjectTrade(value)) {
-    throw new Error(`Invalid Client Connect response: ${fieldName} is not a supported trade`);
+  if (typeof value !== 'string') return null;
+
+  const normalised = value.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (normalised === 'demolition') return 'demo';
+  if (normalised === 'decking' || normalised === 'carpentry') return 'carpentry_decking';
+  if (isCcProjectTrade(normalised)) {
+    return normalised;
   }
-  return value;
+
+  return 'other';
+}
+
+function optionalTrade(value: unknown): CcProjectTrade | null {
+  return normalizeTrade(value);
 }
 
 function validateCcProjectVariations(payload: unknown): CcProjectVariation[] {
@@ -173,7 +183,7 @@ function validateCcProjectVariations(payload: unknown): CcProjectVariation[] {
       accepted_at: optionalString(v.accepted_at, 'variation accepted_at'),
       section_id: optionalUuid(v.section_id, 'variation section_id'),
       section_name: optionalString(v.section_name, 'variation section_name'),
-      section_trade: optionalTrade(v.section_trade, 'variation section_trade'),
+      section_trade: optionalTrade(v.section_trade),
       team_signed_at: optionalString(v.team_signed_at, 'variation team_signed_at'),
       client_signed_at: optionalString(v.client_signed_at, 'variation client_signed_at'),
       href: optionalString(v.href, 'variation href'),
@@ -201,7 +211,7 @@ function validateCcProjectSections(payload: unknown): CcProjectSection[] {
     return {
       id: s.id,
       name: s.name,
-      trade: optionalTrade(s.trade, 'section trade'),
+      trade: optionalTrade(s.trade),
     };
   });
 }
@@ -256,14 +266,14 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
       throw new Error('Invalid Client Connect response: site_address must be string or null');
     }
     if (!isCcProjectStatus(status)) {
-      throw new Error('Invalid Client Connect response: status must be planning or active');
+      throw new Error('Invalid Client Connect response: status is not supported');
     }
     if (tradesRaw != null && !Array.isArray(tradesRaw)) {
       throw new Error('Invalid Client Connect response: trades must be an array');
     }
 
     const trades = Array.isArray(tradesRaw)
-      ? tradesRaw.filter((trade): trade is CcProjectTrade => isCcProjectTrade(trade))
+      ? Array.from(new Set(tradesRaw.map(normalizeTrade).filter((trade): trade is CcProjectTrade => trade !== null)))
       : [];
 
     projects.push({
