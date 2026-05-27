@@ -135,8 +135,9 @@ export default function JobsListPage() {
       if (isTestJob(job)) continue;
 
       const project = ccProjectForJob(job);
+      const projectId = project?.project_id ?? job.cc_project_id ?? null;
       const titleKey = normalise(project?.project_title ?? job.cc_project_title_snapshot ?? job.name);
-      const key = titleKey ? `title:${titleKey}` : project ? `cc:${project.project_id}` : `job:${job.id}`;
+      const key = projectId ? `cc:${projectId}` : titleKey ? `title:${titleKey}` : `job:${job.id}`;
       const existing = byKey.get(key);
       if (!existing) {
         byKey.set(key, job);
@@ -160,21 +161,30 @@ export default function JobsListPage() {
     });
   }, [jobs, ccProjects]);
 
-  const visibleJobTitleKeys = React.useMemo(() => {
+  const visibleCcProjectIds = React.useMemo(() => {
     return new Set(
-      visibleJobs.map((job) => {
-        const project = ccProjectForJob(job);
-        return normalise(project?.project_title ?? job.cc_project_title_snapshot ?? job.name);
-      })
+      visibleJobs
+        .map((job) => ccProjectForJob(job)?.project_id ?? job.cc_project_id ?? null)
+        .filter((projectId): projectId is string => Boolean(projectId))
+    );
+  }, [visibleJobs, ccProjects]);
+
+  const visibleLegacyTitleKeys = React.useMemo(() => {
+    return new Set(
+      visibleJobs
+        .filter((job) => !job.cc_project_id && !ccProjectForJob(job))
+        .map((job) => normalise(job.cc_project_title_snapshot ?? job.name))
+        .filter(Boolean)
     );
   }, [visibleJobs, ccProjects]);
 
   const availableCcProjects = React.useMemo(() => {
     return ccProjects.filter((project) => {
       if (isTestProject(project)) return false;
-      return !visibleJobTitleKeys.has(normalise(project.project_title));
+      if (visibleCcProjectIds.has(project.project_id)) return false;
+      return !visibleLegacyTitleKeys.has(normalise(project.project_title));
     });
-  }, [ccProjects, visibleJobTitleKeys]);
+  }, [ccProjects, visibleCcProjectIds, visibleLegacyTitleKeys]);
 
   function clientConnectLabel(job: Job): { title: string; client: string | null; address: string | null; isLinked: boolean } {
     const project = ccProjectForJob(job);
