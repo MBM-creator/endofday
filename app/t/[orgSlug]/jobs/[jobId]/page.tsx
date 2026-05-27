@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
+import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
 import { ccClientDisplayName } from '@/lib/cc-client-display';
 
@@ -1285,6 +1286,13 @@ export default function JobDetailPage() {
             {!photosLoading && photos.length >= MAX_PHOTOS && (
               <p className="text-gray-500 text-sm">Maximum photos reached.</p>
             )}
+
+            <JobActivityFeed
+              orgSlug={orgSlug}
+              jobId={jobId}
+              stages={stages.map((stage) => ({ id: stage.id, name: stage.name }))}
+              activeStageId={job.active_stage_id ?? null}
+            />
           </>
         )}
       </div>

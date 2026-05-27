@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
+import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
 
 interface Job {
@@ -201,6 +202,14 @@ export default function TodaysWorkPage() {
                 </div>
               )}
             </div>
+
+            <JobActivityFeed
+              orgSlug={orgSlug}
+              jobId={jobId}
+              stages={stages.map((stage) => ({ id: stage.id, name: stage.name }))}
+              activeStageId={job.active_stage_id ?? null}
+              compact
+            />
 
             {!job.active_stage_id && (
               <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">

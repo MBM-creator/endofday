@@ -15,6 +15,18 @@ export function newImageStorageFileName(): string {
   return `${randomUUID()}.jpg`;
 }
 
+export function videoFileExtension(mimeType: string, fileName = ''): 'mp4' | 'mov' | 'webm' {
+  const lowerName = fileName.toLowerCase();
+  const lowerType = mimeType.toLowerCase();
+  if (lowerType === 'video/quicktime' || lowerName.endsWith('.mov')) return 'mov';
+  if (lowerType === 'video/webm' || lowerName.endsWith('.webm')) return 'webm';
+  return 'mp4';
+}
+
+export function newVideoStorageFileName(mimeType: string, fileName = ''): string {
+  return `${randomUUID()}.${videoFileExtension(mimeType, fileName)}`;
+}
+
 /** Calendar date in Australia/Sydney (YYYY-MM-DD) for report filing day. */
 export function formatReportDate(submittedAt: Date | string): string {
   const d = typeof submittedAt === 'string' ? new Date(submittedAt) : submittedAt;
@@ -112,4 +124,14 @@ export function qaEvidencePhotoStoragePath(
   const sec = slugifyPathSegment(sectionCode, 64);
   const item = slugifyPathSegment(itemKey, 64);
   return `jobs/${seg}/qa/${type}/${runId}/${sec}/${item}/${fileName}`;
+}
+
+export function jobNoteVideoStoragePath(
+  jobId: string,
+  jobName: string,
+  noteId: string,
+  fileName: string
+): string {
+  const seg = jobSlugOrIdSegment(jobId, jobName);
+  return `jobs/${seg}/notes/${noteId}/videos/${fileName}`;
 }
