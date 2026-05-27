@@ -1,11 +1,21 @@
 import { randomUUID } from 'crypto';
 
-export type CcProjectStatus = 'planning' | 'active';
+export type CcProjectStatus =
+  | 'planning'
+  | 'active'
+  | 'quote_accepted'
+  | 'deposit_paid'
+  | 'prestart_date_set'
+  | 'prestart_paid'
+  | 'wip';
 export type CcProjectTrade =
   | 'paving'
   | 'concrete'
   | 'carpentry_decking'
+  | 'demo'
+  | 'fencing'
   | 'irrigation'
+  | 'mulching'
   | 'planting'
   | 'electrical'
   | 'other';
@@ -72,7 +82,15 @@ function isUuid(value: unknown): value is string {
 }
 
 function isCcProjectStatus(value: unknown): value is CcProjectStatus {
-  return value === 'planning' || value === 'active';
+  return (
+    value === 'planning' ||
+    value === 'active' ||
+    value === 'quote_accepted' ||
+    value === 'deposit_paid' ||
+    value === 'prestart_date_set' ||
+    value === 'prestart_paid' ||
+    value === 'wip'
+  );
 }
 
 function isCcProjectTrade(value: unknown): value is CcProjectTrade {
@@ -80,7 +98,10 @@ function isCcProjectTrade(value: unknown): value is CcProjectTrade {
     value === 'paving' ||
     value === 'concrete' ||
     value === 'carpentry_decking' ||
+    value === 'demo' ||
+    value === 'fencing' ||
     value === 'irrigation' ||
+    value === 'mulching' ||
     value === 'planting' ||
     value === 'electrical' ||
     value === 'other'

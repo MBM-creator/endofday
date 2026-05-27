@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import type { CcProject } from '@/lib/cc-client';
 import { ccClientDisplayName } from '@/lib/cc-client-display';
 
@@ -20,12 +20,14 @@ interface Job {
 
 export default function JobsListPage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = (params?.orgSlug as string) ?? '';
 
   const [jobs, setJobs] = useState<Job[]>([]);
   const [ccProjects, setCcProjects] = useState<CcProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [creatingProjectId, setCreatingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug) {
@@ -122,6 +124,10 @@ export default function JobsListPage() {
     return /^test(?:\s|$)/.test(name) || /^test(?:\s|$)/.test(title) || /^test client/.test(client);
   }
 
+  function isTestProject(project: CcProject): boolean {
+    return /^test(?:\s|$)/.test(normalise(project.project_title)) || /^test client/.test(normalise(project.client_name));
+  }
+
   const visibleJobs = React.useMemo(() => {
     const byKey = new Map<string, Job>();
 
@@ -154,6 +160,22 @@ export default function JobsListPage() {
     });
   }, [jobs, ccProjects]);
 
+  const visibleJobTitleKeys = React.useMemo(() => {
+    return new Set(
+      visibleJobs.map((job) => {
+        const project = ccProjectForJob(job);
+        return normalise(project?.project_title ?? job.cc_project_title_snapshot ?? job.name);
+      })
+    );
+  }, [visibleJobs, ccProjects]);
+
+  const availableCcProjects = React.useMemo(() => {
+    return ccProjects.filter((project) => {
+      if (isTestProject(project)) return false;
+      return !visibleJobTitleKeys.has(normalise(project.project_title));
+    });
+  }, [ccProjects, visibleJobTitleKeys]);
+
   function clientConnectLabel(job: Job): { title: string; client: string | null; address: string | null; isLinked: boolean } {
     const project = ccProjectForJob(job);
 
@@ -163,6 +185,32 @@ export default function JobsListPage() {
       address: project?.site_address ?? null,
       isLinked: Boolean(project || job.cc_project_id || job.cc_client_id || job.cc_project_title_snapshot || job.cc_client_name_snapshot),
     };
+  }
+
+  async function createFromClientConnect(project: CcProject) {
+    if (!orgSlug || creatingProjectId) return;
+    setError(null);
+    setCreatingProjectId(project.project_id);
+
+    try {
+      const res = await fetch('/api/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgSlug, ccProjectId: project.project_id }),
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data?.ok && data.job?.id) {
+        router.push(`/t/${orgSlug}/jobs/${data.job.id}`);
+        return;
+      }
+
+      setError(typeof data?.message === 'string' ? data.message : 'Failed to create Client Connect job');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create Client Connect job');
+    } finally {
+      setCreatingProjectId(null);
+    }
   }
 
   return (
@@ -190,13 +238,13 @@ export default function JobsListPage() {
           <p className="text-gray-600">Loading jobs…</p>
         )}
 
-        {!loading && !error && visibleJobs.length === 0 && (
+        {!loading && !error && visibleJobs.length === 0 && availableCcProjects.length === 0 && (
           <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
             No jobs yet.
           </div>
         )}
 
-        {!loading && !error && visibleJobs.length > 0 && (
+        {!loading && !error && (visibleJobs.length > 0 || availableCcProjects.length > 0) && (
           <ul className="space-y-3">
             {visibleJobs.map((job) => {
               const ccLabel = clientConnectLabel(job);
@@ -223,6 +271,29 @@ export default function JobsListPage() {
                 </li>
               );
             })}
+            {availableCcProjects.map((project) => (
+              <li key={project.project_id}>
+                <button
+                  type="button"
+                  onClick={() => createFromClientConnect(project)}
+                  disabled={!!creatingProjectId}
+                  className="block w-full rounded-lg border border-gray-200 bg-white p-4 text-left shadow-sm transition hover:border-[#698F00] hover:shadow disabled:cursor-wait disabled:opacity-70"
+                >
+                  <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                    <span className="font-medium text-gray-900">{project.project_title}</span>
+                    <span className="text-xs font-medium uppercase text-[#698F00]">
+                      {project.status.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {[ccClientDisplayName(project), project.site_address].filter(Boolean).join(' — ')}
+                  </p>
+                  {creatingProjectId === project.project_id && (
+                    <p className="mt-2 text-xs text-gray-500">Creating job…</p>
+                  )}
+                </button>
+              </li>
+            ))}
           </ul>
         )}
       </div>
