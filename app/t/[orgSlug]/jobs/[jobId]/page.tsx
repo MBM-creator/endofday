@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
 import type { CcProject } from '@/lib/cc-client';
+import { compressImageForUpload } from '@/lib/client-image-compression';
 
 interface Job {
   id: string;
@@ -541,8 +542,9 @@ export default function JobDetailPage() {
       for (const file of toUpload) {
         if (!(file instanceof File) || file.size === 0) continue;
         const formData = new FormData();
-        formData.append('file', file);
         try {
+          const uploadFile = await compressImageForUpload(file);
+          formData.append('file', uploadFile);
           const res = await fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`, {
             method: 'POST',
             body: formData,

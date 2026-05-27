@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { getSectionItemsForSetup, parseRunSetup } from '@/lib/paving-qa-v1-catalog';
 import type { PavingQaSetup, PavingSectionCode } from '@/lib/paving-qa-v1-types';
+import { compressImageForUpload } from '@/lib/client-image-compression';
 
 type Answers = Record<string, { result: string; note: string }>;
 
@@ -85,13 +86,19 @@ export default function PavingQaSectionPage() {
     }));
   }
 
-  function addFiles(key: string, files: FileList | null) {
+  async function addFiles(key: string, files: FileList | null) {
     if (isReadOnly) return;
     if (!files?.length) return;
-    setPhotoFiles((prev) => ({
-      ...prev,
-      [key]: [...(prev[key] ?? []), ...Array.from(files)],
-    }));
+    setError(null);
+    try {
+      const nextFiles = await Promise.all(Array.from(files).map((file) => compressImageForUpload(file)));
+      setPhotoFiles((prev) => ({
+        ...prev,
+        [key]: [...(prev[key] ?? []), ...nextFiles],
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to prepare photo');
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
