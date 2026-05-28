@@ -1,12 +1,20 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import type { CcProject } from '@/lib/cc-client';
 import { ccClientDisplayName } from '@/lib/cc-client-display';
 
 type CreateMode = 'client-connect' | 'manual';
+
+interface ExistingJob {
+  id: string;
+  cc_project_id?: string | null;
+  cc_quote_id?: string | null;
+  cc_job_id?: string | null;
+  cc_job_number?: string | null;
+}
 
 export default function NewJobPage() {
   const params = useParams();
@@ -16,6 +24,7 @@ export default function NewJobPage() {
   const [mode, setMode] = useState<CreateMode>('client-connect');
   const [name, setName] = useState('');
   const [ccProjects, setCcProjects] = useState<CcProject[]>([]);
+  const [existingJobs, setExistingJobs] = useState<ExistingJob[]>([]);
   const [selectedCcProjectId, setSelectedCcProjectId] = useState('');
   const [ccLoading, setCcLoading] = useState(false);
   const [ccError, setCcError] = useState<string | null>(null);
@@ -55,8 +64,65 @@ export default function NewJobPage() {
     };
   }, [orgSlug]);
 
+  useEffect(() => {
+    if (!orgSlug) return;
+    let cancelled = false;
+    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json())
+      .then((data: { ok?: boolean; jobs?: ExistingJob[] }) => {
+        if (!cancelled && data?.ok && Array.isArray(data.jobs)) {
+          setExistingJobs(data.jobs);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setExistingJobs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSlug]);
+
+  function projectIdentity(project: CcProject): string {
+    if (project.cc_job_id) return `cc_job_id:${project.cc_job_id}`;
+    if (project.cc_job_number) return `cc_job_number:${project.cc_job_number}`;
+    if (project.quote_id) return `cc_quote_id:${project.quote_id}`;
+    return `cc_project_id:${project.project_id}`;
+  }
+
+  function jobIdentity(job: ExistingJob): string | null {
+    if (job.cc_job_id) return `cc_job_id:${job.cc_job_id}`;
+    if (job.cc_job_number) return `cc_job_number:${job.cc_job_number}`;
+    if (job.cc_quote_id) return `cc_quote_id:${job.cc_quote_id}`;
+    const project = job.cc_project_id
+      ? ccProjects.find((candidate) => candidate.project_id === job.cc_project_id) ?? null
+      : null;
+    if (project) return projectIdentity(project);
+    if (job.cc_project_id) return `cc_project_id:${job.cc_project_id}`;
+    return null;
+  }
+
+  const existingJobIdentities = useMemo(
+    () => new Set(existingJobs.map(jobIdentity).filter((identity): identity is string => Boolean(identity))),
+    [existingJobs, ccProjects]
+  );
+  const availableCcProjects = useMemo(
+    () => ccProjects.filter((project) => !existingJobIdentities.has(projectIdentity(project))),
+    [ccProjects, existingJobIdentities]
+  );
+
+  useEffect(() => {
+    if (mode !== 'client-connect') return;
+    if (availableCcProjects.length === 0) {
+      setSelectedCcProjectId('');
+      return;
+    }
+    if (!selectedCcProjectId || !availableCcProjects.some((project) => project.project_id === selectedCcProjectId)) {
+      setSelectedCcProjectId(availableCcProjects[0].project_id);
+    }
+  }, [availableCcProjects, mode, selectedCcProjectId]);
+
   const selectedProject = selectedCcProjectId
-    ? ccProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
+    ? availableCcProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
     : null;
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -73,6 +139,10 @@ export default function NewJobPage() {
 
     if (usingCc && !selectedCcProjectId) {
       setError('Select a Client Connect project');
+      return;
+    }
+    if (usingCc && !selectedProject) {
+      setError('That Client Connect job is already linked to a QA job');
       return;
     }
     if (!usingCc && !trimmedName) {
@@ -140,7 +210,7 @@ export default function NewJobPage() {
               <button
                 type="button"
                 onClick={() => setMode('client-connect')}
-                disabled={ccProjects.length === 0}
+                disabled={availableCcProjects.length === 0}
                 className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                   mode === 'client-connect'
                     ? 'bg-[#698F00] text-white'
@@ -171,13 +241,13 @@ export default function NewJobPage() {
                   id="ccProject"
                   value={selectedCcProjectId}
                   onChange={(e) => setSelectedCcProjectId(e.target.value)}
-                  disabled={ccLoading || isSubmitting || ccProjects.length === 0}
+                  disabled={ccLoading || isSubmitting || availableCcProjects.length === 0}
                   className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent bg-white text-gray-900 disabled:bg-gray-100"
                   required
                 >
                   {ccLoading && <option value="">Loading Client Connect projects…</option>}
-                  {!ccLoading && ccProjects.length === 0 && <option value="">No Client Connect projects available</option>}
-                  {!ccLoading && ccProjects.map((project) => (
+                  {!ccLoading && availableCcProjects.length === 0 && <option value="">No Client Connect projects available</option>}
+                  {!ccLoading && availableCcProjects.map((project) => (
                     <option key={project.project_id} value={project.project_id}>
                       {project.project_title} — {ccClientDisplayName(project)}
                       {project.site_address ? ` — ${project.site_address}` : ''}
@@ -236,7 +306,7 @@ export default function NewJobPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting || (mode === 'client-connect' && (ccLoading || !selectedCcProjectId))}
+              disabled={isSubmitting || (mode === 'client-connect' && (ccLoading || !selectedCcProjectId || !selectedProject))}
               className="w-full bg-[#698F00] text-white py-3 px-6 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
               {isSubmitting ? 'Creating…' : mode === 'client-connect' ? 'Create from Client Connect' : 'Create job'}

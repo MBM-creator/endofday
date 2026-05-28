@@ -17,6 +17,9 @@ interface Job {
   created_at: string;
   active_stage_id?: string | null;
   cc_project_id?: string | null;
+  cc_quote_id?: string | null;
+  cc_job_id?: string | null;
+  cc_job_number?: string | null;
   cc_client_id?: string | null;
   cc_project_title_snapshot?: string | null;
   cc_client_name_snapshot?: string | null;
@@ -76,6 +79,25 @@ const MAX_PHOTOS = 10;
 
 function normaliseMatchText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function projectIdentity(project: CcProject): string {
+  if (project.cc_job_id) return `cc_job_id:${project.cc_job_id}`;
+  if (project.cc_job_number) return `cc_job_number:${project.cc_job_number}`;
+  if (project.quote_id) return `cc_quote_id:${project.quote_id}`;
+  return `cc_project_id:${project.project_id}`;
+}
+
+function jobIdentityWithProjects(job: Job, projects: CcProject[]): string | null {
+  if (job.cc_job_id) return `cc_job_id:${job.cc_job_id}`;
+  if (job.cc_job_number) return `cc_job_number:${job.cc_job_number}`;
+  if (job.cc_quote_id) return `cc_quote_id:${job.cc_quote_id}`;
+  const project = job.cc_project_id
+    ? projects.find((candidate) => candidate.project_id === job.cc_project_id) ?? null
+    : null;
+  if (project) return projectIdentity(project);
+  if (job.cc_project_id) return `cc_project_id:${job.cc_project_id}`;
+  return null;
 }
 
 /**
@@ -146,6 +168,7 @@ export default function JobDetailPage() {
   const jobId = (params?.jobId as string) ?? '';
 
   const [job, setJob] = useState<Job | null>(null);
+  const [allJobs, setAllJobs] = useState<Job[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [photos, setPhotos] = useState<PreCommencementPhoto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -248,6 +271,24 @@ export default function JobDetailPage() {
       cancelled = true;
     };
   }, [orgSlug, jobId]);
+
+  useEffect(() => {
+    if (!orgSlug) return;
+    let cancelled = false;
+    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json())
+      .then((data: { ok?: boolean; jobs?: Job[] }) => {
+        if (!cancelled && data?.ok && Array.isArray(data.jobs)) {
+          setAllJobs(data.jobs);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAllJobs([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSlug]);
 
   // Fetch pre-commencement photos when job is available
   useEffect(() => {
@@ -731,8 +772,18 @@ export default function JobDetailPage() {
   }
 
   const selectedCcProjectId = ccSelectedProjectId || job?.cc_project_id || '';
+  const linkedIdentitiesForOtherJobs = new Set(
+    allJobs
+      .filter((candidate) => candidate.id !== job?.id)
+      .map((candidate) => jobIdentityWithProjects(candidate, ccProjects))
+      .filter((identity): identity is string => Boolean(identity))
+  );
+  const selectableCcProjects = ccProjects.filter((project) => {
+    if (project.project_id === job?.cc_project_id) return true;
+    return !linkedIdentitiesForOtherJobs.has(projectIdentity(project));
+  });
   const selectedCcProject = selectedCcProjectId
-    ? ccProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
+    ? selectableCcProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
     : null;
   const connectedProjectTitle =
     selectedCcProject?.project_title ?? job?.cc_project_title_snapshot ?? '';
@@ -823,14 +874,14 @@ export default function JobDetailPage() {
                     onChange={(e) => {
                       const nextProjectId = e.target.value;
                       setCcSelectedProjectId(nextProjectId);
-                      const nextProject = ccProjects.find((project) => project.project_id === nextProjectId);
+                      const nextProject = selectableCcProjects.find((project) => project.project_id === nextProjectId);
                       setManualCcProjectTitle(nextProject?.project_title ?? '');
                       setManualCcClientName(nextProject ? ccClientDisplayName(nextProject) : '');
                     }}
                     disabled={ccProjectsLoading || ccMappingSaving || !!ccProjectsError}
                   >
                     <option value="">Not linked</option>
-                    {ccProjects.map((project) => (
+                    {selectableCcProjects.map((project) => (
                       <option key={project.project_id} value={project.project_id}>
                         {project.project_title} — {ccClientDisplayName(project)}
                         {project.site_address ? ` — ${project.site_address}` : ''} ({project.status})

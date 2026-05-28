@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
-import { fetchCcProjects } from '@/lib/cc-client';
+import { ccProjectJobIdentity, fetchCcProjects } from '@/lib/cc-client';
 import type { CcProject } from '@/lib/cc-client';
 import { ccClientDisplayName } from '@/lib/cc-client-display';
 import { syncCcProjectStagesForJob } from '@/lib/sync-cc-project-stages';
@@ -53,6 +53,102 @@ function isValidUuid(s: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s);
 }
 
+const JOB_SELECT =
+  'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_quote_id, cc_job_id, cc_job_number, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot';
+
+type JobRow = {
+  id: string;
+  organisation_id: string;
+  name: string;
+  site_id: string | null;
+  created_at: string;
+  active_stage_id: string | null;
+  cc_project_id: string | null;
+  cc_quote_id: string | null;
+  cc_job_id: string | null;
+  cc_job_number: string | null;
+  cc_client_id: string | null;
+  cc_project_title_snapshot: string | null;
+  cc_client_name_snapshot: string | null;
+};
+
+function jobIdentity(job: Pick<JobRow, 'cc_project_id' | 'cc_quote_id' | 'cc_job_id' | 'cc_job_number'>): string | null {
+  if (job.cc_job_id) return `cc_job_id:${job.cc_job_id}`;
+  if (job.cc_job_number) return `cc_job_number:${job.cc_job_number}`;
+  if (job.cc_quote_id) return `cc_quote_id:${job.cc_quote_id}`;
+  if (job.cc_project_id) return `cc_project_id:${job.cc_project_id}`;
+  return null;
+}
+
+function findExistingCcJob(jobs: JobRow[], project: CcProject, projectsById: Map<string, CcProject>): JobRow | null {
+  const selectedIdentity = ccProjectJobIdentity(project);
+  return jobs.find((job) => {
+    if (jobIdentity(job) === selectedIdentity) return true;
+    if (job.cc_quote_id && project.quote_id && job.cc_quote_id === project.quote_id) return true;
+    const linkedProject = job.cc_project_id ? projectsById.get(job.cc_project_id) : undefined;
+    return linkedProject ? ccProjectJobIdentity(linkedProject) === selectedIdentity : false;
+  }) ?? null;
+}
+
+async function upsertCcProjectJob(
+  organisationId: string,
+  existingJob: JobRow | null,
+  project: CcProject,
+  requestId: string
+): Promise<JobRow> {
+  const payload = {
+    organisation_id: organisationId,
+    name: project.project_title,
+    cc_project_id: project.project_id,
+    cc_quote_id: project.quote_id,
+    cc_job_id: project.cc_job_id,
+    cc_job_number: project.cc_job_number,
+    cc_client_id: project.client_id,
+    cc_project_title_snapshot: project.project_title,
+    cc_client_name_snapshot: ccClientDisplayName(project),
+  };
+
+  const query = existingJob
+    ? supabaseAdmin
+        .from('jobs')
+        .update(payload)
+        .eq('id', existingJob.id)
+        .select(JOB_SELECT)
+        .single()
+    : supabaseAdmin
+        .from('jobs')
+        .insert(payload)
+        .select(JOB_SELECT)
+        .single();
+
+  const { data: job, error } = await query;
+  if (error || !job) {
+    const supabaseErr = normalizeSupabaseError(error ?? null);
+    console.error('[api/jobs] CC job upsert failed:', {
+      requestId,
+      projectId: project.project_id,
+      ccIdentity: ccProjectJobIdentity(project),
+      supabaseError: supabaseErr,
+    });
+    throw new Error('Failed to sync Client Connect jobs');
+  }
+
+  try {
+    await syncCcProjectStagesForJob(job.id as string, project, requestId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to sync Client Connect sections to stages';
+    console.error('[api/jobs] CC stage sync failed:', {
+      requestId,
+      projectId: project.project_id,
+      jobId: job.id,
+      error: message,
+    });
+    throw new Error(message);
+  }
+
+  return job as JobRow;
+}
+
 export async function GET(request: NextRequest) {
   const requestId = request.headers.get('x-vercel-id') ?? randomUUID().slice(0, 8);
   const orgSlug = request.nextUrl.searchParams.get('orgSlug')?.trim() ?? '';
@@ -91,27 +187,76 @@ export async function GET(request: NextRequest) {
 
   const jobIdFilter = request.nextUrl.searchParams.get('jobId')?.trim() ?? '';
 
-  let query = supabaseAdmin
-    .from('jobs')
-    .select(
-      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
-    )
-    .eq('organisation_id', org.id)
-    .order('created_at', { ascending: false });
+  if (jobIdFilter) {
+    if (!isValidUuid(jobIdFilter)) {
+      return jsonError('jobId must be a valid UUID', 400, requestId);
+    }
 
-  if (jobIdFilter && isValidUuid(jobIdFilter)) {
-    query = query.eq('id', jobIdFilter);
+    const { data: jobs, error: jobsError } = await supabaseAdmin
+      .from('jobs')
+      .select(JOB_SELECT)
+      .eq('organisation_id', org.id)
+      .eq('id', jobIdFilter);
+
+    if (jobsError) {
+      const supabaseErr = normalizeSupabaseError(jobsError);
+      console.error('[api/jobs] GET job lookup failed:', { requestId, jobId: jobIdFilter, supabaseError: supabaseErr });
+      return serverError(requestId, supabaseErr.code ?? 'JOBS_LOOKUP', 'Failed to load job');
+    }
+
+    const res = NextResponse.json({ ok: true, jobs: jobs ?? [] });
+    res.headers.set('x-request-id', requestId);
+    return res;
   }
 
-  const { data: jobs, error: jobsError } = await query;
+  let projects: CcProject[];
+  try {
+    projects = await fetchCcProjects(requestId);
+  } catch (err) {
+    const message = err instanceof Error && err.message ? err.message : 'Failed to load Client Connect projects';
+    console.error('[api/jobs] GET CC fetch failed:', { requestId, error: message });
+    const res = NextResponse.json({ ok: false, requestId, message }, { status: 502 });
+    res.headers.set('x-request-id', requestId);
+    return res;
+  }
+
+  const { data: existingJobs, error: jobsError } = await supabaseAdmin
+    .from('jobs')
+    .select(JOB_SELECT)
+    .eq('organisation_id', org.id)
+    .not('cc_project_id', 'is', null);
 
   if (jobsError) {
     const supabaseErr = normalizeSupabaseError(jobsError);
-    console.error('[api/jobs] GET list failed:', { requestId, supabaseError: supabaseErr });
+    console.error('[api/jobs] GET existing CC jobs failed:', { requestId, supabaseError: supabaseErr });
     return serverError(requestId, supabaseErr.code ?? 'JOBS_LIST', 'Failed to list jobs');
   }
 
-  const res = NextResponse.json({ ok: true, jobs: jobs ?? [] });
+  const existingCcJobs = (existingJobs ?? []) as JobRow[];
+  const projectsById = new Map(projects.map((project) => [project.project_id, project]));
+  const syncedJobs: JobRow[] = [];
+  const usedJobIds = new Set<string>();
+
+  for (const project of projects) {
+    const existingJob = findExistingCcJob(
+      existingCcJobs.filter((job) => !usedJobIds.has(job.id)),
+      project,
+      projectsById
+    );
+
+    try {
+      const job = await upsertCcProjectJob(org.id as string, existingJob, project, requestId);
+      syncedJobs.push(job);
+      usedJobIds.add(job.id);
+    } catch (err) {
+      const message = err instanceof Error && err.message ? err.message : 'Failed to sync Client Connect jobs';
+      const res = NextResponse.json({ ok: false, requestId, message }, { status: 502 });
+      res.headers.set('x-request-id', requestId);
+      return res;
+    }
+  }
+
+  const res = NextResponse.json({ ok: true, jobs: syncedJobs });
   res.headers.set('x-request-id', requestId);
   return res;
 }
@@ -197,6 +342,44 @@ export async function POST(request: NextRequest) {
     if (!ccProject) {
       return jsonError('Selected project is not in the active Client Connect projects list', 400, requestId);
     }
+    const selectedProject = ccProject;
+
+    const { data: linkedJobs, error: linkedJobsError } = await supabaseAdmin
+      .from('jobs')
+      .select(JOB_SELECT)
+      .eq('organisation_id', org.id)
+      .not('cc_project_id', 'is', null);
+    if (linkedJobsError) {
+      const supabaseErr = normalizeSupabaseError(linkedJobsError);
+      console.error('[api/jobs] POST existing CC job lookup failed:', {
+        requestId,
+        ccIdentity: ccProjectJobIdentity(selectedProject),
+        supabaseError: supabaseErr,
+      });
+      return serverError(requestId, supabaseErr.code ?? 'JOB_CC_LOOKUP', 'Failed to check existing Client Connect job');
+    }
+    const projectsById = new Map(projects.map((project) => [project.project_id, project]));
+    const selectedIdentity = ccProjectJobIdentity(selectedProject);
+    const existingJob = linkedJobs?.find((job) => {
+      if (typeof job.cc_job_id === 'string' && job.cc_job_id) return `cc_job_id:${job.cc_job_id}` === selectedIdentity;
+      if (typeof job.cc_job_number === 'string' && job.cc_job_number) return `cc_job_number:${job.cc_job_number}` === selectedIdentity;
+      if (
+        typeof job.cc_quote_id === 'string' &&
+        job.cc_quote_id &&
+        selectedProject.quote_id &&
+        job.cc_quote_id === selectedProject.quote_id
+      ) {
+        return true;
+      }
+      const linkedProject = typeof job.cc_project_id === 'string' ? projectsById.get(job.cc_project_id) : undefined;
+      if (linkedProject) return ccProjectJobIdentity(linkedProject) === selectedIdentity;
+      return job.cc_project_id === selectedProject.project_id;
+    });
+    if (existingJob) {
+      const res = NextResponse.json({ ok: true, job: existingJob, existing: true }, { status: 200 });
+      res.headers.set('x-request-id', requestId);
+      return res;
+    }
   }
 
   const jobName = ccProject?.project_title ?? name;
@@ -208,11 +391,14 @@ export async function POST(request: NextRequest) {
       name: jobName,
       site_id: siteId,
       cc_project_id: ccProject?.project_id ?? null,
+      cc_quote_id: ccProject?.quote_id ?? null,
+      cc_job_id: ccProject?.cc_job_id ?? null,
+      cc_job_number: ccProject?.cc_job_number ?? null,
       cc_client_id: ccProject?.client_id ?? null,
       cc_project_title_snapshot: ccProject?.project_title ?? null,
       cc_client_name_snapshot: ccProject ? ccClientDisplayName(ccProject) : null,
     })
-    .select('id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot')
+    .select(JOB_SELECT)
     .single();
 
   if (insertError || !job) {

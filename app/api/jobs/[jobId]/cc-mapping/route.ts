@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'crypto';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
-import { fetchCcProjects } from '@/lib/cc-client';
+import { ccProjectJobIdentity, fetchCcProjects } from '@/lib/cc-client';
 import { ccClientDisplayName } from '@/lib/cc-client-display';
 import { syncCcProjectStagesForJob } from '@/lib/sync-cc-project-stages';
 
@@ -59,6 +59,9 @@ function isValidUuid(s: unknown): s is string {
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(s)
   );
 }
+
+const JOB_SELECT =
+  'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_quote_id, cc_job_id, cc_job_number, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot';
 
 async function validateJobForOrg(
   jobId: string,
@@ -175,6 +178,9 @@ export async function PATCH(
   const clientNameRaw = body.cc_client_name_snapshot ?? null;
 
   let cc_project_id: string | null = null;
+  let cc_quote_id: string | null = null;
+  let cc_job_id: string | null = null;
+  let cc_job_number: string | null = null;
   let cc_client_id: string | null = null;
   let cc_project_title_snapshot: string | null = null;
   let cc_client_name_snapshot: string | null = null;
@@ -248,9 +254,50 @@ export async function PATCH(
       requestId,
       projectId: cc_project_id,
     });
+    cc_quote_id = match.quote_id;
+    cc_job_id = match.cc_job_id;
+    cc_job_number = match.cc_job_number;
     cc_client_id = match.client_id;
     cc_project_title_snapshot = match.project_title;
     cc_client_name_snapshot = ccClientDisplayName(match);
+
+    const { data: linkedJobs, error: linkedJobsError } = await supabaseAdmin
+      .from('jobs')
+      .select(JOB_SELECT)
+      .eq('organisation_id', validation.organisationId)
+      .neq('id', jobId)
+      .not('cc_project_id', 'is', null);
+
+    if (linkedJobsError) {
+      const supabaseErr = normalizeSupabaseError(linkedJobsError);
+      console.error('[api/jobs/[jobId]/cc-mapping] Existing CC job lookup failed:', {
+        requestId,
+        ccIdentity: ccProjectJobIdentity(match),
+        supabaseError: supabaseErr,
+      });
+      return serverError(requestId, supabaseErr.code ?? 'JOB_CC_LOOKUP', 'Failed to check existing Client Connect job');
+    }
+    const projectsById = new Map(projects.map((project) => [project.project_id, project]));
+    const selectedIdentity = ccProjectJobIdentity(match);
+    const existingJob = linkedJobs?.find((linkedJob) => {
+      if (typeof linkedJob.cc_job_id === 'string' && linkedJob.cc_job_id) return `cc_job_id:${linkedJob.cc_job_id}` === selectedIdentity;
+      if (typeof linkedJob.cc_job_number === 'string' && linkedJob.cc_job_number) return `cc_job_number:${linkedJob.cc_job_number}` === selectedIdentity;
+      if (
+        typeof linkedJob.cc_quote_id === 'string' &&
+        linkedJob.cc_quote_id &&
+        match.quote_id &&
+        linkedJob.cc_quote_id === match.quote_id
+      ) {
+        return true;
+      }
+      const linkedProject = typeof linkedJob.cc_project_id === 'string' ? projectsById.get(linkedJob.cc_project_id) : undefined;
+      if (linkedProject) return ccProjectJobIdentity(linkedProject) === selectedIdentity;
+      return linkedJob.cc_project_id === cc_project_id;
+    });
+    if (existingJob) {
+      return jsonError('This Client Connect job is already linked to another QA job', 409, requestId);
+    }
+
     try {
       await syncCcProjectStagesForJob(jobId, match, requestId);
     } catch (err) {
@@ -272,6 +319,9 @@ export async function PATCH(
       return res;
     }
   } else {
+    cc_quote_id = null;
+    cc_job_id = null;
+    cc_job_number = null;
     cc_client_id = null;
     cc_project_title_snapshot = cc_project_title_snapshot?.trim() || null;
     cc_client_name_snapshot = cc_client_name_snapshot?.trim() || null;
@@ -281,14 +331,15 @@ export async function PATCH(
     .from('jobs')
     .update({
       cc_project_id,
+      cc_quote_id,
+      cc_job_id,
+      cc_job_number,
       cc_client_id,
       cc_project_title_snapshot,
       cc_client_name_snapshot,
     })
     .eq('id', jobId)
-    .select(
-      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
-    )
+    .select(JOB_SELECT)
     .single();
 
   if (updateError || !job) {

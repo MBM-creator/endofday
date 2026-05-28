@@ -13,6 +13,9 @@ interface Job {
   site_id: string | null;
   created_at: string;
   cc_project_id?: string | null;
+  cc_quote_id?: string | null;
+  cc_job_id?: string | null;
+  cc_job_number?: string | null;
   cc_client_id?: string | null;
   cc_project_title_snapshot?: string | null;
   cc_client_name_snapshot?: string | null;
@@ -105,6 +108,30 @@ export default function JobsListPage() {
     };
   }
 
+  function projectIdentity(project: CcProject): string {
+    if (project.cc_job_id) return `cc_job_id:${project.cc_job_id}`;
+    if (project.cc_job_number) return `cc_job_number:${project.cc_job_number}`;
+    if (project.quote_id) return `cc_quote_id:${project.quote_id}`;
+    return `cc_project_id:${project.project_id}`;
+  }
+
+  function jobIdentity(job: Job): string {
+    if (job.cc_job_id) return `cc_job_id:${job.cc_job_id}`;
+    if (job.cc_job_number) return `cc_job_number:${job.cc_job_number}`;
+    if (job.cc_quote_id) return `cc_quote_id:${job.cc_quote_id}`;
+    const project = job.cc_project_id
+      ? ccProjects.find((candidate) => candidate.project_id === job.cc_project_id) ?? null
+      : null;
+    if (project) return projectIdentity(project);
+    if (job.cc_project_id) return `cc_project_id:${job.cc_project_id}`;
+    return `qa_job_id:${job.id}`;
+  }
+
+  const visibleJobs = jobs.filter((job, index) => {
+    const identity = jobIdentity(job);
+    return jobs.findIndex((candidate) => jobIdentity(candidate) === identity) === index;
+  });
+
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -130,15 +157,15 @@ export default function JobsListPage() {
           <p className="text-gray-600">Loading jobs…</p>
         )}
 
-        {!loading && !error && jobs.length === 0 && (
+        {!loading && !error && visibleJobs.length === 0 && (
           <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
             No jobs yet.
           </div>
         )}
 
-        {!loading && !error && jobs.length > 0 && (
+        {!loading && !error && visibleJobs.length > 0 && (
           <ul className="space-y-3">
-            {jobs.map((job) => {
+            {visibleJobs.map((job) => {
               const ccLabel = clientConnectLabel(job);
               return (
                 <li key={job.id}>

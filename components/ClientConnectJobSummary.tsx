@@ -1,5 +1,6 @@
 type ClientConnectJob = {
   cc_project_id?: string | null;
+  cc_quote_id?: string | null;
   cc_client_id?: string | null;
   cc_project_title_snapshot?: string | null;
   cc_client_name_snapshot?: string | null;
@@ -20,6 +21,7 @@ export function ClientConnectJobSummary({
 }: ClientConnectJobSummaryProps) {
   const hasLink = Boolean(
     job.cc_project_id ||
+      job.cc_quote_id ||
       job.cc_client_id ||
       job.cc_project_title_snapshot ||
       job.cc_client_name_snapshot
@@ -35,7 +37,7 @@ export function ClientConnectJobSummary({
 
   const title = job.cc_project_title_snapshot || 'Linked Client Connect project';
   const client = job.cc_client_name_snapshot;
-  const isPending = !job.cc_project_id;
+  const isPending = !job.cc_project_id && !job.cc_quote_id;
 
   if (compact) {
     return (

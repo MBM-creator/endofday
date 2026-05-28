@@ -105,7 +105,7 @@ export async function GET(
   const { data: job, error: jobError } = await supabaseAdmin
     .from('jobs')
     .select(
-      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
+      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_quote_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
     )
     .eq('id', jobId)
     .eq('organisation_id', org.id)
