@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { guardStaffApi } from '@/lib/guard-staff-api';
-import { loadRunBundle } from '@/lib/paving-qa-run-bundle';
+import { loadQaRunBundle } from '@/lib/qa-run-bundle';
 import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
+import { v2RunHasIncompleteEvidence } from '@/lib/paving-qa-v2-graph';
+import { irrigationRunHasIncompleteEvidence } from '@/lib/irrigation-qa-v1-graph';
+import { fencingRunHasIncompleteEvidence } from '@/lib/fencing-qa-v1-graph';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -102,7 +105,7 @@ export async function GET(
   const { data: job, error: jobError } = await supabaseAdmin
     .from('jobs')
     .select(
-      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
+      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_quote_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
     )
     .eq('id', jobId)
     .eq('organisation_id', org.id)
@@ -282,27 +285,65 @@ export async function GET(
     }
   }
 
-  let qaEodWarning: { message: string; activeRunId: string } | null = null;
+  let qaEodWarning: { message: string; activeRunId: string; qaType?: string } | null = null;
   try {
-    const { data: activeQa } = await supabaseAdmin
+    const { data: activeQaRows } = await supabaseAdmin
       .from('paving_qa_runs')
-      .select('id')
+      .select('id, qa_type')
       .eq('job_id', jobId)
-      .eq('status', 'active')
-      .limit(1)
-      .maybeSingle();
+      .eq('status', 'active');
 
-    if (activeQa?.id) {
-      const bundle = await loadRunBundle(activeQa.id as string, jobId);
-      if (
-        bundle.ok &&
-        activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
-      ) {
+    for (const activeQa of activeQaRows ?? []) {
+      const bundle = await loadQaRunBundle(activeQa.id as string, jobId);
+      let hasIncomplete = false;
+      let warningMessage = '';
+      let qaType = String((activeQa as { qa_type?: string | null }).qa_type ?? 'paving');
+      if (bundle.ok && bundle.qaType === 'irrigation') {
+        qaType = 'irrigation';
+        hasIncomplete = irrigationRunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'Irrigation QA evidence is incomplete. Review the irrigation QA run before completing today\'s report.';
+      } else if (bundle.ok && bundle.qaType === 'fencing') {
+        qaType = 'fencing';
+        hasIncomplete = fencingRunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'Fencing QA evidence is incomplete. Review the fencing QA run before completing today\'s report.';
+      } else if (bundle.ok && bundle.version === 1) {
+        hasIncomplete = activeRunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'An active paving QA run still has incomplete required evidence. You can submit end of day, but finish QA when possible.';
+      } else if (bundle.ok && bundle.version === 2) {
+        hasIncomplete = v2RunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'Paving QA evidence is incomplete. Review the paving QA run before completing today\'s report.';
+      }
+      if (hasIncomplete) {
         qaEodWarning = {
           activeRunId: activeQa.id as string,
-          message:
-            'An active paving QA run still has incomplete required evidence. You can submit end of day, but finish QA when possible.',
+          qaType,
+          message: warningMessage,
         };
+        break;
       }
     }
   } catch (qaErr) {
@@ -325,7 +366,7 @@ export async function GET(
     actualLabourHoursTotal: number;
     briefError?: string | null;
     photosError?: string | null;
-    qaEodWarning?: { message: string; activeRunId: string } | null;
+    qaEodWarning?: { message: string; activeRunId: string; qaType?: string } | null;
   } = {
     ok: true,
     job,

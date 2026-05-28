@@ -2,9 +2,10 @@ import { fetchCcProjects, type CcProject, type CcProjectTrade } from '@/lib/cc-c
 
 type JobWithClientConnect = {
   cc_project_id?: string | null;
+  cc_quote_id?: string | null;
 };
 
-export type QaCheckType = 'paving' | 'irrigation';
+export type QaCheckType = 'paving' | 'irrigation' | 'fencing';
 
 export function getApplicableQaChecks(project: CcProject | null): QaCheckType[] {
   if (!project) return ['paving'];
@@ -12,6 +13,7 @@ export function getApplicableQaChecks(project: CcProject | null): QaCheckType[] 
   const checks: QaCheckType[] = [];
   if (trades.has('paving')) checks.push('paving');
   if (trades.has('irrigation')) checks.push('irrigation');
+  if (trades.has('fencing')) checks.push('fencing');
   return checks;
 }
 
@@ -19,10 +21,13 @@ export async function loadCcProjectForJob(
   job: JobWithClientConnect,
   requestId?: string
 ): Promise<CcProject | null> {
-  if (!job.cc_project_id) return null;
+  if (!job.cc_project_id && !job.cc_quote_id) return null;
   try {
     const projects = await fetchCcProjects(requestId);
-    return projects.find((project) => project.project_id === job.cc_project_id) ?? null;
+    return projects.find((project) => {
+      if (job.cc_quote_id && project.quote_id === job.cc_quote_id) return true;
+      return project.project_id === job.cc_project_id;
+    }) ?? null;
   } catch (err) {
     console.warn('[CC PROJECT CONTEXT] skipped', {
       requestId,

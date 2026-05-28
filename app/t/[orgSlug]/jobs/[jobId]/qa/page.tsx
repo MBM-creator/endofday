@@ -10,6 +10,8 @@ interface RunRow {
   id: string;
   status: string;
   started_at: string;
+  qa_type?: string | null;
+  setup_version?: number | null;
 }
 
 interface JobContext {
@@ -27,7 +29,7 @@ export default function PavingQaHubPage() {
   const [job, setJob] = useState<JobContext | null>(null);
   const [ccProject, setCcProject] = useState<CcProject | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [runsError, setRunsError] = useState(false);
 
   useEffect(() => {
     if (!orgSlug || !jobId) return;
@@ -37,16 +39,15 @@ export default function PavingQaHubPage() {
       .then(({ r, d }) => {
         if (cancelled) return;
         if (!r.ok) {
-          setError(typeof d?.message === 'string' ? d.message : 'Failed to load');
+          setRunsError(true);
           return;
         }
         setRuns(Array.isArray(d.runs) ? d.runs : []);
         setJob(d.job && typeof d.job === 'object' ? d.job : null);
         setCcProject(d.ccProject && typeof d.ccProject === 'object' ? d.ccProject : null);
-        setError(null);
       })
       .catch(() => {
-        if (!cancelled) setError('Failed to load');
+        if (!cancelled) setRunsError(true);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -56,12 +57,17 @@ export default function PavingQaHubPage() {
     };
   }, [orgSlug, jobId]);
 
-  const active = runs.find((x) => x.status === 'active');
+  const activePaving = runs.find((x) => x.status === 'active' && (x.qa_type ?? 'paving') === 'paving');
+  const activeIrrigation = runs.find((x) => x.status === 'active' && x.qa_type === 'irrigation');
+  const activeFencing = runs.find((x) => x.status === 'active' && x.qa_type === 'fencing');
   const linkedToRealCcProject = Boolean(job?.cc_project_id);
   const applicableTrades = new Set(ccProject?.trades ?? []);
   const hasCcTradeData = Boolean(ccProject);
+  // Show paving QA for any job that is not explicitly linked to a CC project
+  // that excludes paving. When runsError, job is null → not linked → always show.
   const pavingApplicable = !linkedToRealCcProject || applicableTrades.has('paving');
   const irrigationApplicable = applicableTrades.has('irrigation');
+  const fencingApplicable = applicableTrades.has('fencing');
   const hasExistingPavingRuns = runs.length > 0;
 
   return (
@@ -83,14 +89,17 @@ export default function PavingQaHubPage() {
           )}
         </div>
 
-        {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{error}</div>
-        )}
         {loading && <p className="text-gray-600">Loading…</p>}
 
-        {!loading && !error && (
+        {!loading && (
           <div className="space-y-4">
-            {linkedToRealCcProject && !hasCcTradeData && (
+            {runsError && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-950">
+                Client Connect project data is unavailable. Local QA checks can still be used.
+              </div>
+            )}
+
+            {!runsError && linkedToRealCcProject && !hasCcTradeData && (
               <div className="p-4 rounded-lg border border-amber-200 bg-amber-50 text-sm text-amber-950">
                 Client Connect project details are unavailable, so QA filtering cannot be confirmed.
               </div>
@@ -108,21 +117,22 @@ export default function PavingQaHubPage() {
                           Evidence run for paving works, base preparation, set-out, surface and supervisor sign-off.
                         </p>
                       </div>
-                      <Link
-                        href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/new`}
-                        className={`inline-block py-2 px-4 rounded-lg font-medium text-white transition-colors ${
-                          active ? 'bg-gray-400 cursor-not-allowed pointer-events-none' : 'bg-[#698F00] hover:bg-[#5a7d00]'
-                        }`}
-                        aria-disabled={!!active}
-                      >
-                        Start
-                      </Link>
+                      {activePaving ? (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${activePaving.id}`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Open active Paving QA run →
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/new`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Start Paving QA
+                        </Link>
+                      )}
                     </div>
-                    {active && (
-                      <p className="mt-2 text-xs text-gray-500">
-                        Complete or cancel the active paving run before starting another.
-                      </p>
-                    )}
                   </div>
                 )}
 
@@ -132,21 +142,57 @@ export default function PavingQaHubPage() {
                       <div>
                         <p className="text-sm font-medium text-gray-900">Irrigation QA</p>
                         <p className="mt-1 text-sm text-gray-600">
-                          This is the applicable QA check for the linked irrigation project. The irrigation workflow is next to build.
+                          Evidence run for irrigation water source checks, before-cover records, controller setup, testing and handover.
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        disabled
-                        className="py-2 px-4 rounded-lg font-medium text-white bg-gray-400 cursor-not-allowed"
-                      >
-                        Coming next
-                      </button>
+                      {activeIrrigation ? (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${activeIrrigation.id}`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Open active Irrigation QA run →
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/new`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Start Irrigation QA
+                        </Link>
+                      )}
                     </div>
                   </div>
                 )}
 
-                {!pavingApplicable && !irrigationApplicable && (
+                {fencingApplicable && (
+                  <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900">Fencing QA</p>
+                        <p className="mt-1 text-sm text-gray-600">
+                          Evidence run for fencing property protection, set-out, post holes, frame, cladding, gates and final supervisor review.
+                        </p>
+                      </div>
+                      {activeFencing ? (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/fencing/${activeFencing.id}`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Open active Fencing QA run →
+                        </Link>
+                      ) : (
+                        <Link
+                          href={`/t/${orgSlug}/jobs/${jobId}/qa/fencing/new`}
+                          className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                        >
+                          Start Fencing QA
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {!pavingApplicable && !irrigationApplicable && !fencingApplicable && (
                   <div className="p-4 bg-white border border-gray-200 rounded-lg text-sm text-gray-600">
                     No QA checks are configured for this project&apos;s Client Connect trades yet.
                   </div>
@@ -154,29 +200,21 @@ export default function PavingQaHubPage() {
               </div>
             </section>
 
-            {active && (
-              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <p className="text-sm font-medium text-gray-900">Active paving run</p>
-                <Link
-                  href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${active.id}`}
-                  className="mt-2 inline-block text-[#698F00] font-medium hover:underline"
-                >
-                  Open run →
-                </Link>
-              </div>
-            )}
-
             {hasExistingPavingRuns && (
               <section className="mt-8">
-                <h2 className="text-lg font-semibold text-gray-900 mb-2">Paving runs</h2>
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">QA runs</h2>
                 <ul className="divide-y divide-gray-200 border border-gray-200 rounded-lg bg-white">
                   {runs.map((r) => (
                     <li key={r.id} className="px-4 py-3 flex justify-between items-center">
                       <span className="text-sm text-gray-700">
-                        {new Date(r.started_at).toLocaleString()} — {r.status}
+                        {new Date(r.started_at).toLocaleString()} — {(r.qa_type ?? 'paving')} — {r.status}
                       </span>
                       <Link
-                        href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${r.id}`}
+                        href={(r.qa_type ?? 'paving') === 'irrigation'
+                          ? `/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${r.id}`
+                          : r.qa_type === 'fencing'
+                            ? `/t/${orgSlug}/jobs/${jobId}/qa/fencing/${r.id}`
+                            : `/t/${orgSlug}/jobs/${jobId}/qa/paving/${r.id}`}
                         className="text-sm text-[#698F00] hover:underline"
                       >
                         View

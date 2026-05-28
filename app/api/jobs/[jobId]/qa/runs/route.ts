@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { validateJobForOrg, validateStageBelongsToJob, normalizeSupabaseError } from '@/lib/job-org-validation';
 import { guardStaffApi } from '@/lib/guard-staff-api';
-import { validateSetup } from '@/lib/paving-qa-v1-catalog';
+import { validateSetupV2 } from '@/lib/paving-qa-v2-setup';
+import { validateIrrigationSetupV1 } from '@/lib/irrigation-qa-v1-setup';
+import { validateFencingSetupV1 } from '@/lib/fencing-qa-v1-setup';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -43,7 +45,7 @@ export async function GET(
   const { data: rows, error } = await supabaseAdmin
     .from('paving_qa_runs')
     .select(
-      'id, job_id, stage_id, status, setup, started_at, updated_at, completed_at, supervisor_final_approved_at'
+      'id, job_id, stage_id, status, qa_type, setup, setup_version, started_at, updated_at, completed_at, supervisor_final_approved_at'
     )
     .eq('job_id', jobId)
     .order('started_at', { ascending: false });
@@ -73,13 +75,18 @@ export async function POST(
     return staffAuth;
   }
 
+  // Only supervisor or admin may create new QA runs
+  if (staffAuth.staff.role !== 'supervisor' && staffAuth.staff.role !== 'admin') {
+    return jsonError('Only supervisors and admins can create QA runs', 403, requestId);
+  }
+
   const v = await validateJobForOrg(jobId, orgSlug, requestId);
   if (v instanceof NextResponse) {
     v.headers.set('x-request-id', requestId);
     return v;
   }
 
-  let body: { setup?: unknown; stageId?: string | null };
+  let body: { setup?: unknown; stageId?: string | null; qaType?: string };
   try {
     const raw = await request.json();
     body = typeof raw === 'object' && raw !== null ? (raw as typeof body) : {};
@@ -87,9 +94,15 @@ export async function POST(
     return jsonError('Invalid JSON body', 400, requestId);
   }
 
-  const setupParsed = validateSetup(body.setup ?? {});
+  const qaType = body.qaType === 'irrigation' || body.qaType === 'fencing' ? body.qaType : 'paving';
+  const setupParsed = qaType === 'irrigation'
+    ? validateIrrigationSetupV1(body.setup ?? {})
+    : qaType === 'fencing'
+      ? validateFencingSetupV1(body.setup ?? {})
+      : validateSetupV2(body.setup ?? {});
   if (!setupParsed.ok) {
-    return jsonError(setupParsed.message, 400, requestId);
+    const first = setupParsed.errors[0];
+    return jsonError(first?.message ?? 'Invalid setup', 400, requestId);
   }
   const setup = setupParsed.setup;
 
@@ -107,6 +120,7 @@ export async function POST(
     .from('paving_qa_runs')
     .select('id')
     .eq('job_id', jobId)
+    .eq('qa_type', qaType)
     .eq('status', 'active')
     .limit(1);
 
@@ -115,7 +129,7 @@ export async function POST(
     return serverError(requestId);
   }
   if (activeRows && activeRows.length > 0) {
-    return jsonError('An active paving QA run already exists for this job', 409, requestId);
+    return jsonError(`An active ${qaType} QA run already exists for this job`, 409, requestId);
   }
 
   const now = new Date().toISOString();
@@ -125,13 +139,15 @@ export async function POST(
       job_id: jobId,
       stage_id: stageId,
       status: 'active',
+      qa_type: qaType,
       setup,
+      setup_version: qaType === 'paving' ? 2 : 1,
       started_at: now,
       updated_at: now,
       started_by: staffAuth.staff.id,
     })
     .select(
-      'id, job_id, stage_id, status, setup, started_at, updated_at, completed_at, supervisor_final_approved_at'
+      'id, job_id, stage_id, status, qa_type, setup, setup_version, started_at, updated_at, completed_at, supervisor_final_approved_at'
     )
     .single();
 
