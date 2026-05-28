@@ -654,10 +654,20 @@ export default function JobDetailPage() {
         {!loading && !error && job && (
           <>
             <div className="mb-6">
-              <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
-              {job.created_at && (
-                <p className="mt-1 text-sm text-gray-500">{formatDate(job.created_at)}</p>
-              )}
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
+                  {job.created_at && (
+                    <p className="mt-1 text-sm text-gray-500">{formatDate(job.created_at)}</p>
+                  )}
+                </div>
+                <Link
+                  href={`/t/${orgSlug}/jobs`}
+                  className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:border-[#698F00] hover:text-[#698F00]"
+                >
+                  Home
+                </Link>
+              </div>
               <Link
                 href={`/t/${orgSlug}/jobs/${jobId}/today`}
                 className="mt-2 inline-block text-sm font-medium text-[#698F00] hover:underline"
