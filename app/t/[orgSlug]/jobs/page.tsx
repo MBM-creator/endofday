@@ -18,6 +18,14 @@ interface Job {
   cc_client_name_snapshot?: string | null;
 }
 
+const CLIENT_CONNECT_STATUS_ORDER: Record<string, number> = {
+  wip: 0,
+  deposit_paid: 1,
+  prestart_date_set: 2,
+  prestart_paid: 3,
+  quote_accepted: 4,
+};
+
 export default function JobsListPage() {
   const params = useParams();
   const router = useRouter();
@@ -128,6 +136,16 @@ export default function JobsListPage() {
     return /^test(?:\s|$)/.test(normalise(project.project_title)) || /^test client/.test(normalise(project.client_name));
   }
 
+  function statusRank(status: string | null | undefined): number {
+    return CLIENT_CONNECT_STATUS_ORDER[status ?? ''] ?? 99;
+  }
+
+  function compareByDateDesc(a: string, b: string): number {
+    const aTime = new Date(a).getTime();
+    const bTime = new Date(b).getTime();
+    return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+  }
+
   const visibleJobs = React.useMemo(() => {
     const byKey = new Map<string, Job>();
 
@@ -155,9 +173,17 @@ export default function JobsListPage() {
     }
 
     return Array.from(byKey.values()).sort((a, b) => {
-      const aTime = new Date(a.created_at).getTime();
-      const bTime = new Date(b.created_at).getTime();
-      return (Number.isNaN(bTime) ? 0 : bTime) - (Number.isNaN(aTime) ? 0 : aTime);
+      const aProject = ccProjectForJob(a);
+      const bProject = ccProjectForJob(b);
+      const rankDelta = statusRank(aProject?.status) - statusRank(bProject?.status);
+      if (rankDelta !== 0) return rankDelta;
+
+      const dateDelta = compareByDateDesc(a.created_at, b.created_at);
+      if (dateDelta !== 0) return dateDelta;
+
+      const aTitle = normalise(aProject?.project_title ?? a.cc_project_title_snapshot ?? a.name);
+      const bTitle = normalise(bProject?.project_title ?? b.cc_project_title_snapshot ?? b.name);
+      return aTitle.localeCompare(bTitle);
     });
   }, [jobs, ccProjects]);
 
@@ -183,6 +209,10 @@ export default function JobsListPage() {
       if (isTestProject(project)) return false;
       if (visibleCcProjectIds.has(project.project_id)) return false;
       return !visibleLegacyTitleKeys.has(normalise(project.project_title));
+    }).sort((a, b) => {
+      const rankDelta = statusRank(a.status) - statusRank(b.status);
+      if (rankDelta !== 0) return rankDelta;
+      return normalise(a.project_title).localeCompare(normalise(b.project_title));
     });
   }, [ccProjects, visibleCcProjectIds, visibleLegacyTitleKeys]);
 
