@@ -128,12 +128,35 @@ export async function PATCH(
   const validation = await validateJobForOrg(jobId, orgSlug, requestId);
   if (validation instanceof NextResponse) return validation;
 
-  let body: { activeStageId?: string | null };
+  let body: { activeStageId?: string | null; hideFromQaList?: boolean; confirmation?: string };
   try {
     const raw = await request.json();
     body = typeof raw === 'object' && raw !== null ? raw : {};
   } catch {
     const res = NextResponse.json({ ok: false, requestId, message: 'Invalid JSON body' }, { status: 400 });
+    res.headers.set('x-request-id', requestId);
+    return res;
+  }
+
+  if (body.hideFromQaList === true) {
+    if (body.confirmation !== 'DELETE') {
+      return jsonError('Type DELETE to confirm', 400, requestId);
+    }
+
+    const { data: job, error: updateError } = await supabaseAdmin
+      .from('jobs')
+      .update({ hidden_from_qa_at: new Date().toISOString() })
+      .eq('id', jobId)
+      .select('id, organisation_id, name, site_id, created_at, active_stage_id')
+      .single();
+
+    if (updateError || !job) {
+      const supabaseErr = normalizeSupabaseError(updateError ?? null);
+      console.error('[api/jobs/[jobId]] Hide from QA list failed:', { requestId, supabaseError: supabaseErr });
+      return serverError(requestId, supabaseErr.code ?? 'JOB_HIDE', 'Failed to hide job from QA list');
+    }
+
+    const res = NextResponse.json({ ok: true, job });
     res.headers.set('x-request-id', requestId);
     return res;
   }

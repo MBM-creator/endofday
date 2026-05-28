@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
 import type { CcProject } from '@/lib/cc-client';
@@ -81,6 +81,7 @@ function findSuggestedCcProject(job: Job, projects: CcProject[]): CcProject | nu
 
 export default function JobDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const orgSlug = (params?.orgSlug as string) ?? '';
   const jobId = (params?.jobId as string) ?? '';
 
@@ -124,6 +125,10 @@ export default function JobDetailPage() {
   const [ccMappingError, setCcMappingError] = useState<string | null>(null);
   const [manualCcProjectTitle, setManualCcProjectTitle] = useState('');
   const [manualCcClientName, setManualCcClientName] = useState('');
+  const [showHideConfirm, setShowHideConfirm] = useState(false);
+  const [hideConfirmText, setHideConfirmText] = useState('');
+  const [hideJobSaving, setHideJobSaving] = useState(false);
+  const [hideJobError, setHideJobError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -584,6 +589,30 @@ export default function JobDetailPage() {
       setPhotosError('Failed to remove photo');
     } finally {
       setPhotoIdRemoving(null);
+    }
+  }
+
+  async function hideJobFromQaList() {
+    if (!job || hideConfirmText !== 'DELETE') return;
+
+    setHideJobSaving(true);
+    setHideJobError(null);
+    try {
+      const res = await fetch(`/api/jobs/${job.id}?orgSlug=${encodeURIComponent(orgSlug)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hideFromQaList: true, confirmation: hideConfirmText }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.ok) {
+        setHideJobError(typeof data?.message === 'string' ? data.message : 'Failed to hide job from QA list');
+        return;
+      }
+      router.push(`/t/${orgSlug}/jobs`);
+    } catch (err) {
+      setHideJobError(err instanceof Error ? err.message : 'Failed to hide job from QA list');
+    } finally {
+      setHideJobSaving(false);
     }
   }
 
@@ -1115,6 +1144,66 @@ export default function JobDetailPage() {
             {!photosLoading && photos.length >= MAX_PHOTOS && (
               <p className="text-gray-500 text-sm">Maximum photos reached.</p>
             )}
+
+            <section className="mt-12 border-t border-gray-200 pt-6">
+              <h2 className="text-lg font-semibold text-gray-900">Remove from QA list</h2>
+              <p className="mt-2 text-sm text-gray-600">
+                This only hides the job from the QA jobs list. Saved job data, stages, photos and QA records remain stored.
+              </p>
+              {hideJobError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                  {hideJobError}
+                </div>
+              )}
+              {!showHideConfirm ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowHideConfirm(true);
+                    setHideJobError(null);
+                  }}
+                  className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+                >
+                  Delete
+                </button>
+              ) : (
+                <div className="mt-4 space-y-3">
+                  <label className="block text-sm font-medium text-gray-700" htmlFor="hide-job-confirm">
+                    Type DELETE to confirm
+                  </label>
+                  <input
+                    id="hide-job-confirm"
+                    type="text"
+                    value={hideConfirmText}
+                    onChange={(e) => setHideConfirmText(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-transparent focus:ring-2 focus:ring-[#698F00]"
+                    disabled={hideJobSaving}
+                  />
+                  <div className="flex flex-wrap gap-3">
+                    <button
+                      type="button"
+                      onClick={hideJobFromQaList}
+                      disabled={hideConfirmText !== 'DELETE' || hideJobSaving}
+                      className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {hideJobSaving ? 'Deleting…' : 'Delete from QA list'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowHideConfirm(false);
+                        setHideConfirmText('');
+                        setHideJobError(null);
+                      }}
+                      disabled={hideJobSaving}
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+            </section>
           </>
         )}
       </div>

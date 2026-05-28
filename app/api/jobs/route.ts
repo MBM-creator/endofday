@@ -92,9 +92,10 @@ export async function GET(request: NextRequest) {
   const { data: jobs, error: jobsError } = await supabaseAdmin
     .from('jobs')
     .select(
-      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
+      'id, organisation_id, name, site_id, created_at, active_stage_id, cc_project_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot, hidden_from_qa_at'
     )
     .eq('organisation_id', org.id)
+    .is('hidden_from_qa_at', null)
     .order('created_at', { ascending: false });
 
   if (jobsError) {
