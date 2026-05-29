@@ -61,6 +61,13 @@ interface JobBrief {
   updated_at: string;
 }
 
+interface QaRun {
+  id: string;
+  stage_id: string | null;
+  status: string;
+  qa_type?: 'paving' | 'irrigation' | 'fencing' | string | null;
+}
+
 const MAX_PHOTOS = 10;
 
 function normaliseMatchText(value: string): string {
@@ -77,6 +84,24 @@ function findSuggestedCcProject(job: Job, projects: CcProject[]): CcProject | nu
     projects.find((project) => normaliseMatchText(project.project_title).includes(jobName)) ??
     null
   );
+}
+
+function supportedQaTypeForStage(stage: Stage): 'paving' | 'irrigation' | 'fencing' | null {
+  const trade = stage.cc_section_trade;
+  if (trade === 'paving' || trade === 'irrigation' || trade === 'fencing') return trade;
+
+  const templateName = normaliseMatchText(stage.checklist_templates?.name ?? '');
+  const stageName = normaliseMatchText(stage.name);
+  if (templateName.includes('paving') || stageName.includes('paving')) return 'paving';
+  if (templateName.includes('irrigation') || stageName.includes('irrigation')) return 'irrigation';
+  if (templateName.includes('fencing') || stageName.includes('fencing')) return 'fencing';
+  return null;
+}
+
+function qaTypeLabel(type: 'paving' | 'irrigation' | 'fencing'): string {
+  if (type === 'paving') return 'Paving';
+  if (type === 'irrigation') return 'Irrigation';
+  return 'Fencing';
 }
 
 export default function JobDetailPage() {
@@ -129,6 +154,8 @@ export default function JobDetailPage() {
   const [hideConfirmText, setHideConfirmText] = useState('');
   const [hideJobSaving, setHideJobSaving] = useState(false);
   const [hideJobError, setHideJobError] = useState<string | null>(null);
+  const [qaRuns, setQaRuns] = useState<QaRun[]>([]);
+  const [qaRunsError, setQaRunsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -188,6 +215,30 @@ export default function JobDetailPage() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [orgSlug, jobId]);
+
+  useEffect(() => {
+    if (!orgSlug || !jobId) return;
+
+    let cancelled = false;
+    setQaRunsError(null);
+    fetch(`/api/jobs/${jobId}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json().then((data) => ({ res, data })))
+      .then(({ res, data }) => {
+        if (cancelled) return;
+        if (!res.ok) {
+          setQaRunsError(typeof data?.message === 'string' ? data.message : 'Failed to load QA runs');
+          return;
+        }
+        setQaRuns(Array.isArray(data.runs) ? data.runs : []);
+      })
+      .catch((err) => {
+        if (!cancelled) setQaRunsError(err instanceof Error ? err.message : 'Failed to load QA runs');
       });
 
     return () => {
@@ -984,6 +1035,19 @@ export default function JobDetailPage() {
                   const isSetting = stageIdSettingActive === stage.id;
                   const isUpdatingTemplate = stageIdUpdatingTemplate === stage.id;
                   const selectorDisabled = templatesLoading || !!templatesError || isUpdatingTemplate;
+                  const supportedQaType = supportedQaTypeForStage(stage);
+                  const activeQaRun = supportedQaType
+                    ? qaRuns.find((run) => {
+                        const runQaType = run.qa_type ?? 'paving';
+                        return run.status === 'active' && runQaType === supportedQaType && (run.stage_id === stage.id || run.stage_id == null);
+                      }) ?? null
+                    : null;
+                  const qaLabel = supportedQaType ? qaTypeLabel(supportedQaType) : null;
+                  const qaHref = supportedQaType
+                    ? activeQaRun
+                      ? `/t/${orgSlug}/jobs/${jobId}/qa/${supportedQaType}/${activeQaRun.id}`
+                      : `/t/${orgSlug}/jobs/${jobId}/qa/${supportedQaType}/new?stageId=${encodeURIComponent(stage.id)}`
+                    : '';
                   return (
                     <li
                       key={stage.id}
@@ -1045,6 +1109,21 @@ export default function JobDetailPage() {
                           <span className="text-xs text-gray-500">Saving…</span>
                         )}
                       </div>
+                      {supportedQaType && qaLabel && (
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <Link
+                            href={qaHref}
+                            className="inline-flex items-center rounded-lg bg-[#698F00] px-3 py-2 text-sm font-medium text-white hover:bg-[#5a7d00]"
+                          >
+                            {activeQaRun ? `Open active ${qaLabel} QA` : `Start ${qaLabel} QA`}
+                          </Link>
+                          {qaRunsError && (
+                            <span className="text-xs text-amber-700">
+                              QA run status unavailable; starting may show an active-run warning.
+                            </span>
+                          )}
+                        </div>
+                      )}
                       {stage.checklist_templates?.checklist_template_items &&
                         stage.checklist_templates.checklist_template_items.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
