@@ -501,6 +501,12 @@ async function handleV2Submit(
     photoCountByItem[item.key] = existing + incoming;
   }
 
+  if (sectionCode === 'setup_protection') {
+    for (const item of sectionDef.items) {
+      answers[item.key] = { result: 'pass', note: answers[item.key]?.note ?? '' };
+    }
+  }
+
   // Validate payload against v2 items
   const payloadCheck = validateCrewSectionPayloadV2(sectionDef.items, answers, photoCountByItem);
   if (!payloadCheck.ok) {

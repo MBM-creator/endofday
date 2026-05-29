@@ -395,6 +395,7 @@ function V2SectionPage({
   const isReadOnly = runStatus !== 'active';
   const isBlocked = sectionState.status === 'blocked';
   const canSubmit = !isReadOnly && !isBlocked;
+  const isPhotoOnlySection = sectionCode === 'setup_protection';
 
   useEffect(() => {
     return () => {
@@ -430,7 +431,13 @@ function V2SectionPage({
     setSaved(false);
     try {
       const fd = new FormData();
-      fd.set('answers', JSON.stringify(answers));
+      const submittedAnswers = isPhotoOnlySection
+        ? items.reduce<Answers>((next, item) => {
+            next[item.key] = { result: 'pass', note: answers[item.key]?.note ?? '' };
+            return next;
+          }, {})
+        : answers;
+      fd.set('answers', JSON.stringify(submittedAnswers));
       for (const [itemKey, files] of Object.entries(photoFiles)) {
         for (const file of files) fd.append(`item_${itemKey}`, file);
       }
@@ -560,24 +567,26 @@ function V2SectionPage({
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-3">
-                  {(item.allowNa
-                    ? (['pass', 'fail', 'not_required'] as const)
-                    : (['pass', 'fail'] as const)
-                  ).map((r) => (
-                    <label key={r} className="flex items-center gap-1.5 text-sm cursor-pointer">
-                      <input
-                        type="radio"
-                        name={`r-${item.key}`}
-                        checked={result === r}
-                        disabled={!canSubmit}
-                        onChange={() => setResult(item.key, r)}
-                        className="accent-[#698F00]"
-                      />
-                      <span>{r === 'not_required' ? 'N/A' : r.charAt(0).toUpperCase() + r.slice(1)}</span>
-                    </label>
-                  ))}
-                </div>
+                {!isPhotoOnlySection && (
+                  <div className="flex flex-wrap gap-3">
+                    {(item.allowNa
+                      ? (['pass', 'fail', 'not_required'] as const)
+                      : (['pass', 'fail'] as const)
+                    ).map((r) => (
+                      <label key={r} className="flex items-center gap-1.5 text-sm cursor-pointer">
+                        <input
+                          type="radio"
+                          name={`r-${item.key}`}
+                          checked={result === r}
+                          disabled={!canSubmit}
+                          onChange={() => setResult(item.key, r)}
+                          className="accent-[#698F00]"
+                        />
+                        <span>{r === 'not_required' ? 'N/A' : r.charAt(0).toUpperCase() + r.slice(1)}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
 
                 {/* Note field: always shown on fail; also shown when noteRequiredWhen matches
                     or when an existing note is present (so pre-populated notes remain visible) */}
@@ -611,7 +620,7 @@ function V2SectionPage({
                 <SavedPhotos savedCount={savedPhotoCount} loadedPhotos={loadedPhotos} />
 
                 {/* Upload section — hidden when N/A is selected (photo not required) */}
-                {item.requirePhoto && result !== 'not_required' && (
+                {item.requirePhoto && (isPhotoOnlySection || result !== 'not_required') && (
                   <div>
                     <p className="text-xs text-gray-600 mb-1.5">
                       {savedPhotoCount > 0 ? 'Add more photos (optional)' : 'Photos'}
