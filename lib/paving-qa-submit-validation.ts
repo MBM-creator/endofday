@@ -54,6 +54,16 @@ export function validateCrewSectionPayloadV2(
   const errors: string[] = [];
 
   for (const item of items) {
+    if (item.photoOnly) {
+      if (item.requirePhoto) {
+        const n = photoCountByItem[item.key] ?? 0;
+        if (n < 1) {
+          errors.push(`Item "${item.label}": at least one photo required`);
+        }
+      }
+      continue;
+    }
+
     const a = answers[item.key];
     const result = (a?.result ?? '').trim() as V2ItemResult | '';
 

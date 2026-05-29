@@ -501,7 +501,16 @@ async function handleV2Submit(
     photoCountByItem[item.key] = existing + incoming;
   }
 
-  // Validate payload against v2 items
+  // Validate payload against v2 items — photo-only items need photos, not pass/fail
+  for (const item of sectionDef.items) {
+    if (item.photoOnly) {
+      answers[item.key] = {
+        result: 'pass',
+        note: (answers[item.key]?.note ?? '').trim(),
+      };
+    }
+  }
+
   const payloadCheck = validateCrewSectionPayloadV2(sectionDef.items, answers, photoCountByItem);
   if (!payloadCheck.ok) {
     return NextResponse.json(
