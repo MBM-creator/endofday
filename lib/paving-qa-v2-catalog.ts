@@ -510,12 +510,12 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
     title: 'Before Jointing',
     description: 'Surface stability, falls, cuts, joints and surface preparation confirmed before jointing locks the surface in.',
     items: [
-      item('surface_stable', 'Paving surface is stable. Fall and drainage have been checked', {
+      item('surface_stable', 'Paving surface is stable. Fall and drainage meets standards', {
         requirePhoto: true,
         criticalOnFail: true,
         notePrompt: 'Show me with a level.',
       }),
-      item('cuts_acceptable', 'Cuts, borders, edges and transitions are acceptable before grouting/caulking', {
+      item('cuts_acceptable', 'Cuts, borders, edges and transitions meet standards before grouting/caulking', {
         requirePhoto: true,
         criticalOnFail: true,
       }),
@@ -525,7 +525,6 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
       }),
       item('jointing_approved', 'Supervisor accepts the laid surface before jointing begins', {
         criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail'],
         notePrompt: 'Record who approved the surface and any required corrections.',
       }),
     ],
@@ -540,6 +539,10 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
         criticalOnFail: true,
       }),
       item('joints_complete', 'Joints are complete and full', {
+        requirePhoto: true,
+        criticalOnFail: true,
+      }),
+      item('caulking_complete', 'Caulking is full, level and clean', {
         requirePhoto: true,
         criticalOnFail: true,
       }),
