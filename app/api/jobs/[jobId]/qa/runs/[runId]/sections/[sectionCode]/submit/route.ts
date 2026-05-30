@@ -14,6 +14,7 @@ import {
 import {
   getApplicableV2SectionCodes,
   getV2SectionDefinition,
+  getV2SectionItemsForSetup,
   isV2SectionCode,
   type PavingSectionCodeV2,
 } from '@/lib/paving-qa-v2-catalog';
@@ -131,6 +132,44 @@ function validateFiles(
     return { ok: false, message: `At most ${MAX_PHOTOS_PER_SECTION} new photos per submit` };
   }
   return { ok: true };
+}
+
+function isUploadOnlyRequest(request: NextRequest): boolean {
+  return request.nextUrl.searchParams.get('uploadOnly') === '1';
+}
+
+async function handleUploadOnlyPhotos(
+  runId: string,
+  sectionCode: string,
+  jobId: string,
+  jobName: string,
+  filesByItem: Map<string, File[]>,
+  staffId: string,
+  requestId: string,
+  qaType: 'paving' | 'irrigation' | 'fencing' = 'paving'
+): Promise<NextResponse> {
+  if (filesByItem.size === 0) {
+    return jsonError('No photos to upload', 400, requestId);
+  }
+  const fileCheck = validateFiles(filesByItem);
+  if (!fileCheck.ok) return jsonError(fileCheck.message, 400, requestId);
+
+  const photoErr = await uploadSectionPhotos(
+    runId,
+    sectionCode,
+    jobId,
+    jobName,
+    filesByItem,
+    staffId,
+    requestId,
+    false,
+    qaType
+  );
+  if (photoErr) return photoErr;
+
+  const res = NextResponse.json({ ok: true, uploadOnly: true });
+  res.headers.set('x-request-id', requestId);
+  return res;
 }
 
 /**
@@ -329,6 +368,19 @@ export async function POST(
     }
   }
 
+  if (isUploadOnlyRequest(request)) {
+    return handleUploadOnlyPhotos(
+      runId,
+      sectionCode,
+      jobId,
+      v.job.name,
+      filesByItem,
+      staffAuth.staff.id,
+      requestId,
+      'paving'
+    );
+  }
+
   const payloadCheck = validateCrewSectionPayload(setup, sectionCode, answers, photoCountByItem);
   if (!payloadCheck.ok) {
     return NextResponse.json({ ok: false, message: 'Validation failed', errors: payloadCheck.errors }, { status: 400 });
@@ -336,7 +388,16 @@ export async function POST(
 
   const submittedAt = new Date().toISOString();
 
-  const photoErr = await uploadSectionPhotos(runId, sectionCode, jobId, v.job.name, filesByItem, staffAuth.staff.id, requestId);
+  const photoErr = await uploadSectionPhotos(
+    runId,
+    sectionCode,
+    jobId,
+    v.job.name,
+    filesByItem,
+    staffAuth.staff.id,
+    requestId,
+    filesByItem.size > 0
+  );
   if (photoErr) return photoErr;
 
   const { error: upsertErr } = await supabaseAdmin.from('paving_qa_section_submissions').upsert(
@@ -454,6 +515,7 @@ async function handleV2Submit(
   if (!sectionDef) {
     return serverError(requestId, 'Section definition not found');
   }
+  const sectionItems = getV2SectionItemsForSetup(sectionCode, setup);
 
   // Parse form data
   let formData: FormData;
@@ -491,9 +553,22 @@ async function handleV2Submit(
   const fileCheck = validateFiles(filesByItem);
   if (!fileCheck.ok) return jsonError(fileCheck.message, 400, requestId);
 
+  if (isUploadOnlyRequest(request)) {
+    return handleUploadOnlyPhotos(
+      runId,
+      sectionCode,
+      jobId,
+      jobName,
+      filesByItem,
+      staff.id,
+      requestId,
+      'paving'
+    );
+  }
+
   // Compute photo counts per item (existing + incoming)
   const photoCountByItem: Record<string, number> = {};
-  for (const item of sectionDef.items) {
+  for (const item of sectionItems) {
     const existing = photoRows.filter(
       (p) => p.section_code === sectionCode && p.item_key === item.key
     ).length;
@@ -502,7 +577,7 @@ async function handleV2Submit(
   }
 
   // Validate payload against v2 items — photo-only items need photos, not pass/fail
-  for (const item of sectionDef.items) {
+  for (const item of sectionItems) {
     if (item.photoOnly) {
       const current = (answers[item.key]?.result ?? '').trim();
       if (item.allowNa && current === 'not_required') {
@@ -519,7 +594,7 @@ async function handleV2Submit(
     }
   }
 
-  const payloadCheck = validateCrewSectionPayloadV2(sectionDef.items, answers, photoCountByItem);
+  const payloadCheck = validateCrewSectionPayloadV2(sectionItems, answers, photoCountByItem);
   if (!payloadCheck.ok) {
     return NextResponse.json(
       { ok: false, message: 'Validation failed', errors: payloadCheck.errors },
@@ -555,7 +630,7 @@ async function handleV2Submit(
   // Issues are part of the audit trail and are NEVER deleted automatically.
   // On fail: create a new blocking issue only if no active issue already exists for this run/section/item.
   // On pass or not_required: leave existing issues in place — a supervisor/admin must resolve them.
-  for (const item of sectionDef.items) {
+  for (const item of sectionItems) {
     const r = (answers[item.key]?.result ?? '').trim();
     if (r !== 'fail') continue;
 
@@ -678,6 +753,19 @@ async function handleIrrigationSubmit(
 
   const fileCheck = validateFiles(filesByItem);
   if (!fileCheck.ok) return jsonError(fileCheck.message, 400, requestId);
+
+  if (isUploadOnlyRequest(request)) {
+    return handleUploadOnlyPhotos(
+      runId,
+      sectionCode,
+      jobId,
+      jobName,
+      filesByItem,
+      staff.id,
+      requestId,
+      'irrigation'
+    );
+  }
 
   const photoCountByItem: Record<string, number> = {};
   for (const item of sectionDef.items) {
@@ -837,6 +925,19 @@ async function handleFencingSubmit(
 
   const fileCheck = validateFiles(filesByItem);
   if (!fileCheck.ok) return jsonError(fileCheck.message, 400, requestId);
+
+  if (isUploadOnlyRequest(request)) {
+    return handleUploadOnlyPhotos(
+      runId,
+      sectionCode,
+      jobId,
+      jobName,
+      filesByItem,
+      staff.id,
+      requestId,
+      'fencing'
+    );
+  }
 
   const photoCountByItem: Record<string, number> = {};
   for (const item of sectionDef.items) {

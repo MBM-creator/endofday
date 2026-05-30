@@ -1,6 +1,8 @@
 import type {
   PavingQaSetupV2,
   PavingInstallMethodV2,
+  PavingMaterialTypeV2,
+  PavingAreaUse,
 } from './paving-qa-v2-types';
 
 // ---------------------------------------------------------------------------
@@ -21,10 +23,8 @@ export type PavingSectionCodeV2 =
   | 'wet_bed_preparation'
   // Existing concrete / adhesive (glue_existing_concrete + glue_new_concrete)
   | 'existing_concrete_assessment'
-  | 'adhesive_surface_preparation'
-  | 'adhesive_installation'
   // Laying / material / area
-  | 'setout_first_section'
+  | 'paving_preparation_and_laying'
   | 'variable_thickness_stone_review'
   | 'stepper_installation'
   | 'driveway_preparation'
@@ -53,6 +53,12 @@ export type V2CatalogueItem = {
   notePrompt?: string;
   /** Photo evidence only — crew uploads photos; pass/fail is not shown or required. */
   photoOnly?: boolean;
+  /** When set, item only applies if the run setup includes at least one of these area uses. */
+  whenAreaUses?: PavingAreaUse[];
+  /** When set, item only applies if the run install method is one of these values. */
+  whenInstallMethods?: PavingInstallMethodV2[];
+  /** When set, item only applies if the run material type is one of these values. */
+  whenMaterialTypes?: PavingMaterialTypeV2[];
 };
 
 export type V2CatalogueSection = {
@@ -82,8 +88,18 @@ function item(
     noteRequiredWhen: opts.noteRequiredWhen,
     notePrompt: opts.notePrompt,
     photoOnly: opts.photoOnly ?? false,
+    whenAreaUses: opts.whenAreaUses,
+    whenInstallMethods: opts.whenInstallMethods,
+    whenMaterialTypes: opts.whenMaterialTypes,
   };
 }
+
+const GLUE_INSTALL_METHODS: PavingInstallMethodV2[] = ['glue_new_concrete', 'glue_existing_concrete'];
+const NON_STEPPER_MATERIALS: PavingMaterialTypeV2[] = [
+  'consistent_thickness',
+  'variable_thickness_natural_stone',
+  'mixed_materials',
+];
 
 // ---------------------------------------------------------------------------
 // Section definitions
@@ -183,12 +199,8 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
   {
     code: 'concrete_reinforcement',
     title: 'Concrete Reinforcement',
-    description: 'Mesh type and need recorded; chairs correct; laps acceptable; no interference with drains or edges; driveway/high-load reinforcement requirements checked.',
+    description: 'Mesh chaired and lapped correctly; clearances checked; driveway/high-load reinforcement checked where applicable.',
     items: [
-      item('mesh_installed', 'Reinforcement mesh installed', {
-        requirePhoto: true,
-        criticalOnFail: true,
-      }),
       item('mesh_chaired', 'Mesh is chaired correctly and not sitting on ground', {
         requirePhoto: true,
         criticalOnFail: true,
@@ -212,20 +224,19 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
         notePrompt: 'If this is not a driveway or high-load area, record not required. If applicable, record reinforcement provision.',
+        whenAreaUses: ['driveway_vehicle_traffic'],
       }),
     ],
   },
   {
     code: 'concrete_pre_pour',
     title: 'Pre-Pour Inspection',
-    description: 'Final verification that protection, formwork, fall, reinforcement and heights are confirmed before concrete is poured. Supervisor sign-off recorded.',
+    description: 'Final verification that protection and heights are confirmed before concrete is poured. Supervisor sign-off recorded.',
     items: [
       item('pre_pour_protection', 'Property protection in place before pour', {
         requirePhoto: true,
         criticalOnFail: true,
-      }),
-      item('pre_pour_checks_complete', 'Excavation, formwork, fall and reinforcement checks complete before pour', {
-        criticalOnFail: true,
+        allowNa: true,
       }),
       item('pre_pour_heights', 'Finished heights checked before pour', {
         criticalOnFail: true,
@@ -253,7 +264,7 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
       }),
       item('pour_curing', 'Concrete protected and curing requirements in place', {
         criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail'],
+        allowNa: true,
       }),
     ],
   },
@@ -353,89 +364,87 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
     ],
   },
   {
-    code: 'adhesive_surface_preparation',
-    title: 'Adhesive Surface Preparation',
-    description: 'Surface cleaned and prepared, dryness checked, primer/compatibility reviewed, and joint/crack treatment planned before adhesive is installed.',
+    code: 'paving_preparation_and_laying',
+    title: 'Paving Preparation and Laying',
+    description:
+      'Surface prepared and adhesive installed where applicable; set-out, pattern direction and first section confirmed before broad laying continues.',
     items: [
       item('surface_clean', 'Surface cleaned of dust, dirt, oil, loose material, paint, sealer, laitance or contaminants', {
         requirePhoto: true,
         criticalOnFail: true,
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
       item('surface_dry', 'Surface is dry/suitable enough for adhesive according to product requirements and site conditions', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
       item('primer_compatibility', 'Primer/waterproofing/membrane compatibility has been checked where relevant', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail', 'not_required'],
         notePrompt: 'Record product/system compatibility, or why not required.',
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
       item('joint_treatment_planned', 'Control joints, slab joints and cracks have a planned treatment before adhesive install', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail', 'not_required'],
         notePrompt: 'Record how joints/cracks will be treated or carried through.',
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
-    ],
-  },
-  {
-    code: 'adhesive_installation',
-    title: 'Adhesive Installation',
-    description: 'Trowel, coverage and back-buttering correct; movement joints respected; substrate genuinely suitable before paving proceeds.',
-    items: [
       item('adhesive_coverage', 'Correct trowel size, bed thickness and coverage method used', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
       item('back_butter', 'Large-format, dense, natural stone or uneven pieces are back-buttered where required', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail', 'not_required'],
         notePrompt: 'Record whether back-buttering was used or why it was not required.',
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
       item('movement_joints_respected', 'Movement joints in the substrate are respected through the paving layer', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail', 'not_required'],
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
       item('substrate_genuine', 'Adhesive is not being used to hide poor levels, hollow areas or unsuitable substrate', {
         requirePhoto: true,
         criticalOnFail: true,
+        whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
-    ],
-  },
-
-  // ---- Laying / material ----
-  {
-    code: 'setout_first_section',
-    title: 'Set-Out & First Section Laying',
-    description: 'Starting point, pattern direction and first section confirmed before broad laying continues.',
-    items: [
       item('setout_plan', 'Set-out, pattern direction and starting point checked before broad laying begins', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
         notePrompt: 'Record pattern direction, starting point and any visual alignment decisions.',
+        whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
       item('borders_planned', 'Borders, cuts, edges and transitions have been planned before laying continues', {
         criticalOnFail: true,
+        whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
       item('first_section_check', 'First section laid to confirm level, fall, joint width and visual alignment (approximately 1 m²)', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
         notePrompt: 'Record joint width target, level/fall check and any corrections made.',
+        whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
       item('first_section_stable', 'Paving surface is stable with no rocking pieces in the first section', {
         criticalOnFail: true,
+        whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
       item('first_section_approved', 'Supervisor accepts the first section before the crew continues broadly', {
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
         notePrompt: 'Record who checked the first section and any conditions before continuing.',
+        whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
     ],
   },
@@ -607,9 +616,8 @@ export function getApplicableV2SectionCodes(setup: PavingQaSetupV2): PavingSecti
     add('wet_bed_preparation');
   } else if (setup.install_method === 'glue_new_concrete') {
     add('concrete_formwork', 'concrete_reinforcement', 'concrete_pre_pour', 'concrete_pour_finish');
-    add('adhesive_surface_preparation', 'adhesive_installation');
   } else if (setup.install_method === 'glue_existing_concrete') {
-    add('existing_concrete_assessment', 'adhesive_surface_preparation', 'adhesive_installation');
+    add('existing_concrete_assessment');
   } else if (setup.install_method === 'crushed_rock_wet_bed') {
     add('crushed_rock_base', 'wet_bed_preparation');
   }
@@ -623,10 +631,10 @@ export function getApplicableV2SectionCodes(setup: PavingQaSetupV2): PavingSecti
       add('driveway_preparation');
     }
 
-    // setout_first_section: all non-other-mixed methods except pure steppers
+    const isGlue = GLUE_INSTALL_METHODS.includes(setup.install_method);
     const pureSteppers = setup.material_type === 'steppers';
-    if (!pureSteppers) {
-      add('setout_first_section');
+    if (isGlue || !pureSteppers) {
+      add('paving_preparation_and_laying');
     }
 
     // variable_thickness_stone_review: variable thickness or mixed materials
@@ -665,6 +673,26 @@ export function getV2SectionDefinition(code: PavingSectionCodeV2): V2CatalogueSe
   return SECTION_BY_CODE.get(code);
 }
 
+export function getV2SectionItemsForSetup(
+  code: PavingSectionCodeV2,
+  setup: PavingQaSetupV2
+): V2CatalogueItem[] {
+  const def = getV2SectionDefinition(code);
+  if (!def) return [];
+  return def.items.filter((catalogItem) => {
+    if (catalogItem.whenAreaUses?.length) {
+      if (!catalogItem.whenAreaUses.some((use) => setup.area_uses.includes(use))) return false;
+    }
+    if (catalogItem.whenInstallMethods?.length) {
+      if (!catalogItem.whenInstallMethods.includes(setup.install_method)) return false;
+    }
+    if (catalogItem.whenMaterialTypes?.length) {
+      if (!catalogItem.whenMaterialTypes.includes(setup.material_type)) return false;
+    }
+    return true;
+  });
+}
+
 export function getV2SectionsForSetup(setup: PavingQaSetupV2): V2CatalogueSection[] {
   return getApplicableV2SectionCodes(setup)
     .map((c) => SECTION_BY_CODE.get(c))
@@ -687,8 +715,8 @@ export function hasConcreteBase(setup: PavingQaSetupV2): boolean {
 }
 
 /**
- * The final install-prep section code for a given setup — used by the graph
- * to determine what the laying sections depend on.
+ * The final substrate / install-prep section before laying work begins.
+ * Used by the graph to determine what driveway and laying sections depend on.
  */
 export function lastInstallSectionCode(setup: PavingQaSetupV2): PavingSectionCodeV2 {
   switch (setup.install_method) {
@@ -696,8 +724,9 @@ export function lastInstallSectionCode(setup: PavingQaSetupV2): PavingSectionCod
     case 'concrete_base_wet_bed':
       return 'wet_bed_preparation';
     case 'glue_new_concrete':
+      return 'concrete_pour_finish';
     case 'glue_existing_concrete':
-      return 'adhesive_installation';
+      return 'existing_concrete_assessment';
     case 'other_mixed':
     default:
       return 'excavation_preparation';

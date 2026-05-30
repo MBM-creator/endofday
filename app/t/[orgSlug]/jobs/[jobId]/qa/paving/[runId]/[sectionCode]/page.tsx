@@ -9,15 +9,12 @@ import { getSectionItemsForSetup, parseRunSetup, getSectionDef } from '@/lib/pav
 import type { PavingQaSetup, PavingSectionCode } from '@/lib/paving-qa-v1-types';
 
 // V2 imports
-import { getV2SectionDefinition, isV2SectionCode, type PavingSectionCodeV2 } from '@/lib/paving-qa-v2-catalog';
+import { getV2SectionDefinition, getV2SectionItemsForSetup, isV2SectionCode, type PavingSectionCodeV2 } from '@/lib/paving-qa-v2-catalog';
+import type { PavingQaSetupV2 } from '@/lib/paving-qa-v2-types';
 import type { V2CatalogueItem } from '@/lib/paving-qa-v2-catalog';
 import type { V2SectionUiState } from '@/lib/paving-qa-v2-graph';
-import {
-  compressImageForUpload,
-  compressImagesForUpload,
-  estimateUploadPayloadBytes,
-  QA_UPLOAD_MAX_TOTAL_BYTES,
-} from '@/lib/client-image-compression';
+import { compressImagesForUpload } from '@/lib/client-image-compression';
+import { submitQaSectionWithPhotos } from '@/lib/qa-section-submit-client';
 
 type Answers = Record<string, { result: string; note: string }>;
 
@@ -202,38 +199,13 @@ function V1SectionPage({
     setError(null);
     setSaved(false);
     try {
-      const answersJson = JSON.stringify(answers);
-      const fd = new FormData();
-      fd.set('answers', answersJson);
-      const uploadFiles: File[] = [];
-      for (const [itemKey, files] of Object.entries(photoFiles)) {
-        for (const file of files) {
-          const uploadFile = await compressImageForUpload(file);
-          uploadFiles.push(uploadFile);
-          fd.append(`item_${itemKey}`, uploadFile);
-        }
-      }
-      if (estimateUploadPayloadBytes(answersJson, uploadFiles) > QA_UPLOAD_MAX_TOTAL_BYTES) {
-        setError('Photos are too large to upload together. Remove a photo or retake at lower resolution.');
-        return;
-      }
-      const res = await fetch(
-        `/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`,
-        { method: 'POST', body: fd }
-      );
-      if (res.status === 413) {
-        setError('Photos are too large to upload. Remove a photo or retake at lower resolution.');
-        return;
-      }
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        setError(
-          typeof data?.message === 'string'
-            ? data.message
-            : Array.isArray(data?.errors)
-              ? data.errors.join('; ')
-              : 'Save failed'
-        );
+      const result = await submitQaSectionWithPhotos({
+        submitUrl: `/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`,
+        answers,
+        photoFiles,
+      });
+      if (!result.ok) {
+        setError(result.errors?.join('\n') ?? result.message ?? 'Save failed');
         return;
       }
       setPhotoFiles({});
@@ -459,35 +431,13 @@ function V2SectionPage({
     setError(null);
     setSaved(false);
     try {
-      const answersJson = JSON.stringify(answers);
-      const fd = new FormData();
-      fd.set('answers', answersJson);
-      const uploadFiles: File[] = [];
-      for (const [itemKey, files] of Object.entries(photoFiles)) {
-        for (const file of files) {
-          const uploadFile = await compressImageForUpload(file);
-          uploadFiles.push(uploadFile);
-          fd.append(`item_${itemKey}`, uploadFile);
-        }
-      }
-      if (estimateUploadPayloadBytes(answersJson, uploadFiles) > QA_UPLOAD_MAX_TOTAL_BYTES) {
-        setError('Photos are too large to upload together. Remove a photo or retake at lower resolution.');
-        return;
-      }
-      const res = await fetch(
-        `/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`,
-        { method: 'POST', body: fd }
-      );
-      if (res.status === 413) {
-        setError('Photos are too large to upload. Remove a photo or retake at lower resolution.');
-        return;
-      }
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        const specificErrors = Array.isArray(data?.errors) && data.errors.length > 0
-          ? (data.errors as string[]).join('\n')
-          : null;
-        setError(specificErrors ?? (typeof data?.message === 'string' ? data.message : 'Save failed'));
+      const result = await submitQaSectionWithPhotos({
+        submitUrl: `/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`,
+        answers,
+        photoFiles,
+      });
+      if (!result.ok) {
+        setError(result.errors?.join('\n') ?? result.message ?? 'Save failed');
         return;
       }
       setPhotoFiles({});
@@ -782,8 +732,13 @@ export default function PavingQaSectionPage() {
 
         if (ver === 2) {
           if (isV2SectionCode(sectionCodeRaw)) {
-            const def = getV2SectionDefinition(sectionCodeRaw as PavingSectionCodeV2);
-            setV2Items(def?.items ?? []);
+            const setup = d.setup as PavingQaSetupV2 | undefined;
+            if (setup?.area_uses?.length) {
+              setV2Items(getV2SectionItemsForSetup(sectionCodeRaw as PavingSectionCodeV2, setup));
+            } else {
+              const def = getV2SectionDefinition(sectionCodeRaw as PavingSectionCodeV2);
+              setV2Items(def?.items ?? []);
+            }
           }
           setV2SectionStates(
             Array.isArray(d.sectionStates) ? (d.sectionStates as V2SectionUiState[]) : []

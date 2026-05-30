@@ -1,6 +1,7 @@
 import {
   getApplicableV2SectionCodes,
   getV2SectionDefinition,
+  getV2SectionItemsForSetup,
   lastInstallSectionCode,
   type PavingSectionCodeV2,
 } from './paving-qa-v2-catalog';
@@ -66,29 +67,32 @@ export function getV2Predecessors(
     case 'existing_concrete_assessment':
       return ['excavation_preparation'];
 
-    case 'adhesive_surface_preparation':
-      if (method === 'glue_existing_concrete') return ['existing_concrete_assessment'];
-      if (method === 'glue_new_concrete') return ['concrete_pour_finish'];
-      return [];
-
-    case 'adhesive_installation':
-      return ifApplicable('adhesive_surface_preparation');
+    case 'paving_preparation_and_laying': {
+      const preds: PavingSectionCodeV2[] = [];
+      if (method === 'glue_existing_concrete') {
+        preds.push('existing_concrete_assessment');
+      } else if (method === 'glue_new_concrete') {
+        preds.push('concrete_pour_finish');
+      } else {
+        preds.push(...ifApplicable(lastInstallSectionCode(setup)));
+      }
+      if (material !== 'steppers' && areaUses.includes('driveway_vehicle_traffic')) {
+        preds.push(...ifApplicable('driveway_preparation'));
+      }
+      return preds;
+    }
 
     case 'driveway_preparation':
       return ifApplicable(lastInstallSectionCode(setup));
 
-    case 'setout_first_section':
-      if (areaUses.includes('driveway_vehicle_traffic')) return ifApplicable('driveway_preparation');
-      return ifApplicable(lastInstallSectionCode(setup));
-
     case 'variable_thickness_stone_review':
-      return ifApplicable('setout_first_section');
+      return ifApplicable('paving_preparation_and_laying');
 
     case 'stepper_installation': {
       if (material === 'variable_thickness_natural_stone' || material === 'mixed_materials') {
         return ifApplicable('variable_thickness_stone_review');
       }
-      if (applicable.has('setout_first_section')) return ['setout_first_section'];
+      if (applicable.has('paving_preparation_and_laying')) return ['paving_preparation_and_laying'];
       return ifApplicable(lastInstallSectionCode(setup));
     }
 
@@ -96,7 +100,7 @@ export function getV2Predecessors(
       const candidates: PavingSectionCodeV2[] = [
         'stepper_installation',
         'variable_thickness_stone_review',
-        'setout_first_section',
+        'paving_preparation_and_laying',
       ];
       const last = candidates.find((c) => applicable.has(c));
       return last ? [last] : ifApplicable(lastInstallSectionCode(setup));
@@ -107,7 +111,7 @@ export function getV2Predecessors(
         'before_jointing',
         'stepper_installation',
         'variable_thickness_stone_review',
-        'setout_first_section',
+        'paving_preparation_and_laying',
         'driveway_preparation',
       ];
       const preds = ifApplicableMany(...candidates);
@@ -146,6 +150,7 @@ type ClearResult = { cleared: true } | { cleared: false; reasons: string[] };
  */
 function isV2SectionCleared(
   code: PavingSectionCodeV2,
+  setup: PavingQaSetupV2,
   submission: SubmissionSnapshot | undefined,
   photoCounts: PhotoCounts,
   issues: IssueSnapshot[]
@@ -162,15 +167,17 @@ function isV2SectionCleared(
     return { cleared: false, reasons: ['Submission not in submitted state'] };
   }
 
-  const def = getV2SectionDefinition(code);
-  if (!def) return { cleared: false, reasons: ['Section definition not found'] };
+  const items = getV2SectionItemsForSetup(code, setup);
+  if (items.length === 0) {
+    return { cleared: false, reasons: ['Section definition not found'] };
+  }
 
   const answers = submission.answers ?? {};
 
   // v2 valid results: not_required is always accepted (v2 equivalent of na)
   const V2_VALID: string[] = ['pass', 'fail', 'not_required'];
 
-  for (const item of def.items) {
+  for (const item of items) {
     if (item.photoOnly) {
       const result = (answers[item.key]?.result ?? '').trim();
       if (item.allowNa && result === 'not_required') {
@@ -294,7 +301,7 @@ export function computeV2SectionUiStates(
   const localClearedMap = new Map<PavingSectionCodeV2, boolean>();
   for (const code of codes) {
     const sub = bySection.get(code);
-    const result = isV2SectionCleared(code, sub, photoCounts, issues);
+    const result = isV2SectionCleared(code, setup, sub, photoCounts, issues);
     localClearedMap.set(code, result.cleared);
   }
 
@@ -303,7 +310,7 @@ export function computeV2SectionUiStates(
     const def = getV2SectionDefinition(code)!;
     const preds = getV2Predecessors(code, setup);
     const sub = bySection.get(code);
-    const clearResult = isV2SectionCleared(code, sub, photoCounts, issues);
+    const clearResult = isV2SectionCleared(code, setup, sub, photoCounts, issues);
     const sectionHasBlockingIssue = hasBlockingIssue(code, issues);
 
     // Build blockedBy list from predecessors

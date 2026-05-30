@@ -5,12 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getFencingSectionDefinition, isFencingSectionCode, type FencingCatalogueItem, type FencingSectionCode } from '@/lib/fencing-qa-v1-catalog';
 import type { FencingSectionUiState } from '@/lib/fencing-qa-v1-graph';
-import {
-  compressImageForUpload,
-  compressImagesForUpload,
-  estimateUploadPayloadBytes,
-  QA_UPLOAD_MAX_TOTAL_BYTES,
-} from '@/lib/client-image-compression';
+import { compressImagesForUpload } from '@/lib/client-image-compression';
+import { submitQaSectionWithPhotos } from '@/lib/qa-section-submit-client';
 
 type Answers = Record<string, { result: string; note: string }>;
 type PhotoRow = { id: string; item_key: string; content_type: string; created_at: string | null; signed_url: string | null };
@@ -221,30 +217,13 @@ export default function FencingQaSectionPage() {
     setError(null);
     setSaved(false);
     try {
-      const answersJson = JSON.stringify(answers);
-      const fd = new FormData();
-      fd.set('answers', answersJson);
-      const uploadFiles: File[] = [];
-      for (const [itemKey, files] of Object.entries(photoFiles)) {
-        for (const file of files) {
-          const uploadFile = await compressImageForUpload(file);
-          uploadFiles.push(uploadFile);
-          fd.append(`item_${itemKey}`, uploadFile);
-        }
-      }
-      if (estimateUploadPayloadBytes(answersJson, uploadFiles) > QA_UPLOAD_MAX_TOTAL_BYTES) {
-        setError('Photos are too large to upload together. Remove a photo or retake at lower resolution.');
-        return;
-      }
-      const res = await fetch(`/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`, { method: 'POST', body: fd });
-      if (res.status === 413) {
-        setError('Photos are too large to upload. Remove a photo or retake at lower resolution.');
-        return;
-      }
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        const specific = Array.isArray(data?.errors) ? data.errors.join('\n') : null;
-        setError(specific ?? (typeof data?.message === 'string' ? data.message : 'Save failed'));
+      const result = await submitQaSectionWithPhotos({
+        submitUrl: `/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`,
+        answers,
+        photoFiles,
+      });
+      if (!result.ok) {
+        setError(result.errors?.join('\n') ?? result.message ?? 'Save failed');
         return;
       }
       setSaved(true);
