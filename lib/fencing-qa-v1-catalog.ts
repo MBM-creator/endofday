@@ -20,6 +20,7 @@ export type FencingCatalogueItem = {
   allowNa: boolean;
   requirePhoto: boolean;
   requireMarkedImage: boolean;
+  photoOnly?: boolean;
   criticalOnFail: boolean;
   requireSupervisorOnFail: boolean;
   noteRequiredWhen?: ('pass' | 'fail' | 'not_required')[];
@@ -44,6 +45,7 @@ function item(key: string, label: string, opts: Partial<FencingCatalogueItem> = 
     allowNa: opts.allowNa ?? false,
     requirePhoto: opts.requirePhoto ?? false,
     requireMarkedImage: opts.requireMarkedImage ?? false,
+    photoOnly: opts.photoOnly ?? false,
     criticalOnFail: opts.criticalOnFail ?? false,
     requireSupervisorOnFail: opts.requireSupervisorOnFail ?? false,
     noteRequiredWhen: opts.noteRequiredWhen,
@@ -58,13 +60,12 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
     title: 'Pre-start / property protection',
     description: 'Record site condition and protect client and neighbouring property before fencing work starts.',
     purpose: 'Confirm protection, access, boundary and service risks before demolition, set-out or digging.',
-    requiredEvidence: ['Existing site/fence condition', 'Client property protection', 'Neighbouring property protection where relevant', 'Access/storage/waste area'],
-    criticalFails: ['Existing damage not recorded', 'Protection missing', 'Service or boundary risk unresolved', 'Access issue unresolved'],
+    requiredEvidence: ['Existing site/fence condition', 'Client property protection', 'Neighbouring property protection where relevant'],
+    criticalFails: ['Existing damage not recorded', 'Protection missing', 'Service or boundary risk unresolved'],
     items: [
-      item('existing_site_condition', 'Existing site/fence condition photographed', { requirePhoto: true, criticalOnFail: true }),
-      item('client_property_protection', 'Client property protection installed before demolition or digging', { requirePhoto: true, criticalOnFail: true }),
+      item('existing_site_condition', 'Existing site/fence condition photographed', { requirePhoto: true, photoOnly: true }),
+      item('client_property_protection', 'Client property protection installed before demolition or digging', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
       item('neighbour_property_protection', 'Neighbouring property protection installed where relevant', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
-      item('access_storage_waste', 'Access, material storage and waste area confirmed', { requirePhoto: true, requireSupervisorOnFail: true }),
       item('services_risks_noted', 'Known services, irrigation, lighting and drainage risks noted', { criticalOnFail: true, noteRequiredWhen: ['pass', 'fail'] }),
       item('no_unresolved_prestart_issue', 'No unresolved access, boundary, service or property damage issue', { criticalOnFail: true, noteRequiredWhen: ['fail'] }),
     ],
@@ -74,16 +75,26 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
     title: 'Set-out / boundary / finished height',
     description: 'Confirm the fence line, boundary position, finished height, post spacing and gate opening where relevant.',
     purpose: 'Lock in the line and height before post holes are dug.',
-    requiredEvidence: ['Stringline / fence line', 'Start and end points', 'Corners/returns', 'Finished height reference', 'Gate opening if relevant'],
-    criticalFails: ['Fence line does not match scope', 'Boundary not confirmed', 'Finished height unclear', 'Gate opening wrong'],
+    requiredEvidence: ['Start, end, corners and returns', 'Boundary position', 'Finished height', 'Post spacing', 'Gate opening if relevant'],
+    criticalFails: ['Set-out not confirmed', 'Boundary not confirmed', 'Finished height unclear', 'Gate opening wrong'],
     items: [
-      item('stringline_fence_line', 'Stringline / fence line photographed', { requirePhoto: true, criticalOnFail: true }),
-      item('start_end_points', 'Start and end points confirmed', { requirePhoto: true, criticalOnFail: true }),
-      item('corners_returns', 'Corners and returns confirmed', { requirePhoto: true, criticalOnFail: true }),
-      item('boundary_confirmed', 'Boundary position confirmed or supervisor-approved', { criticalOnFail: true, noteRequiredWhen: ['pass', 'fail'] }),
-      item('finished_height_confirmed', 'Finished height confirmed', { requirePhoto: true, criticalOnFail: true }),
-      item('post_spacing_setout', 'Post spacing set out', { criticalOnFail: true }),
-      item('gate_opening_confirmed', 'Gate opening confirmed where relevant', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
+      item('start_end_corners_returns', 'Start, end, corners and returns confirmed', { criticalOnFail: true }),
+      item('boundary_confirmed', 'Boundary position confirmed or supervisor-approved', {
+        criticalOnFail: true,
+        noteRequiredWhen: ['pass', 'fail'],
+        notePrompt: 'How was the boundary line confirmed?',
+      }),
+      item('finished_height_confirmed', 'Finished height confirmed', {
+        criticalOnFail: true,
+        noteRequiredWhen: ['pass', 'fail'],
+        notePrompt: 'What is the planned finished height?',
+      }),
+      item('post_spacing_setout', 'Post spacing set out', {
+        criticalOnFail: true,
+        noteRequiredWhen: ['pass', 'fail'],
+        notePrompt: 'Distance between posts (max 2.7m allowed)',
+      }),
+      item('gate_opening_confirmed', 'Gate opening confirmed where relevant', { requirePhoto: true, criticalOnFail: true }),
     ],
   },
   {
@@ -286,6 +297,15 @@ export function getApplicableFencingSectionCodes(setup: FencingQaSetupV1): Fenci
 
 export function getFencingSectionDefinition(code: FencingSectionCode): FencingCatalogueSection | undefined {
   return SECTION_BY_CODE.get(code);
+}
+
+export function getFencingSectionItemsForSetup(
+  code: FencingSectionCode,
+  setup: FencingQaSetupV1
+): FencingCatalogueItem[] {
+  const base = getFencingSectionDefinition(code)?.items ?? [];
+  if (code !== 'setout_boundary_height') return base;
+  return base.filter((item) => item.key !== 'gate_opening_confirmed' || setup.gate);
 }
 
 export function getFencingSectionsForSetup(setup: FencingQaSetupV1): FencingCatalogueSection[] {

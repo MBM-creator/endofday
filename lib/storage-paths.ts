@@ -126,6 +126,25 @@ export function qaEvidencePhotoStoragePath(
   return `jobs/${seg}/qa/${type}/${runId}/${sec}/${item}/${fileName}`;
 }
 
+export function qaSignOffVideoStoragePath(
+  jobId: string,
+  jobName: string,
+  runId: string,
+  sectionCode: string,
+  itemKey: string,
+  mimeType: string,
+  fileName = 'video'
+): string {
+  return qaEvidencePhotoStoragePath(
+    'sign_off',
+    jobId,
+    jobName,
+    runId,
+    sectionCode,
+    itemKey,
+    newVideoStorageFileName(mimeType, fileName)
+  );
+}
 export function jobNoteVideoStoragePath(
   jobId: string,
   jobName: string,

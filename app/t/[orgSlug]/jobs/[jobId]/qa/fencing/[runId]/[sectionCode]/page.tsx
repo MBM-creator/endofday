@@ -3,7 +3,9 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { getFencingSectionDefinition, isFencingSectionCode, type FencingCatalogueItem, type FencingSectionCode } from '@/lib/fencing-qa-v1-catalog';
+import { getFencingSectionDefinition, getFencingSectionItemsForSetup, isFencingSectionCode, type FencingCatalogueItem, type FencingSectionCode } from '@/lib/fencing-qa-v1-catalog';
+import type { FencingQaSetupV1 } from '@/lib/fencing-qa-v1-types';
+import { validateFencingSetupV1 } from '@/lib/fencing-qa-v1-setup';
 import type { FencingSectionUiState } from '@/lib/fencing-qa-v1-graph';
 import { compressImagesForUpload } from '@/lib/client-image-compression';
 import { submitQaSectionWithPhotos } from '@/lib/qa-section-submit-client';
@@ -51,8 +53,8 @@ function ItemCard({
   onFiles: (files: FileList | null) => void;
 }) {
   const result = answer?.result ?? '';
-  const noteRequired = result === 'fail' || (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail' | 'not_required');
-  const needsEvidence = (item.requirePhoto || item.requireMarkedImage) && result !== 'not_required';
+  const noteRequired = !item.photoOnly && (result === 'fail' || (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail' | 'not_required'));
+  const needsEvidence = (item.requirePhoto || item.requireMarkedImage) && (item.photoOnly || result !== 'not_required');
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm space-y-3">
       <div className="flex items-start justify-between gap-2">
@@ -67,16 +69,18 @@ function ItemCard({
         )}
       </div>
 
-      <div className="flex flex-wrap gap-3">
-        {(['pass', 'fail', ...(item.allowNa ? ['not_required'] : [])] as string[]).map((value) => (
-          <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
-            <input type="radio" name={`r-${item.key}`} checked={result === value} disabled={!canSubmit} onChange={() => onResult(value)} className="accent-[#698F00]" />
-            <span>{value === 'not_required' ? 'N/A' : value.charAt(0).toUpperCase() + value.slice(1)}</span>
-          </label>
-        ))}
-      </div>
+      {!item.photoOnly && (
+        <div className="flex flex-wrap gap-3">
+          {(['pass', 'fail', ...(item.allowNa ? ['not_required'] : [])] as string[]).map((value) => (
+            <label key={value} className="flex items-center gap-1.5 text-sm cursor-pointer">
+              <input type="radio" name={`r-${item.key}`} checked={result === value} disabled={!canSubmit} onChange={() => onResult(value)} className="accent-[#698F00]" />
+              <span>{value === 'not_required' ? 'N/A' : value.charAt(0).toUpperCase() + value.slice(1)}</span>
+            </label>
+          ))}
+        </div>
+      )}
 
-      {(noteRequired || Boolean(answer?.note)) && (
+      {!item.photoOnly && (noteRequired || Boolean(answer?.note)) && (
         <div className="space-y-1">
           <p className="text-xs font-medium text-gray-700">Note{noteRequired ? <span className="text-red-500 ml-0.5">*</span> : null}</p>
           <textarea
@@ -120,7 +124,12 @@ export default function FencingQaSectionPage() {
 
   const sectionCode = isFencingSectionCode(sectionCodeRaw) ? (sectionCodeRaw as FencingSectionCode) : null;
   const def = sectionCode ? getFencingSectionDefinition(sectionCode) : null;
-  const items = useMemo(() => def?.items ?? [], [def]);
+
+  const [setup, setSetup] = useState<FencingQaSetupV1 | null>(null);
+  const items = useMemo(
+    () => (sectionCode && setup ? getFencingSectionItemsForSetup(sectionCode, setup) : []),
+    [sectionCode, setup]
+  );
 
   const [sectionState, setSectionState] = useState<FencingSectionUiState | null>(null);
   const [runStatus, setRunStatus] = useState('');
@@ -154,6 +163,12 @@ export default function FencingQaSectionPage() {
           setError(typeof d?.message === 'string' ? d.message : 'Failed to load section');
           return;
         }
+        const setupResult = validateFencingSetupV1(d.setup);
+        if (!setupResult.ok) {
+          setError('Invalid fencing run setup');
+          return;
+        }
+        setSetup(setupResult.setup);
         setRunStatus(String(d.run?.status ?? ''));
         const state = Array.isArray(d.sectionStates)
           ? (d.sectionStates as FencingSectionUiState[]).find((s) => s.code === sectionCode) ?? null

@@ -17,6 +17,45 @@ function appendUploadOnlyParam(url: string): string {
   return url.includes('?') ? `${url}&uploadOnly=1` : `${url}?uploadOnly=1`;
 }
 
+export async function uploadQaSectionPhotosOnly(options: {
+  submitUrl: string;
+  photoFiles: Record<string, File[]>;
+}): Promise<QaSectionSubmitResult> {
+  const uploadUrl = appendUploadOnlyParam(options.submitUrl);
+
+  for (const [itemKey, files] of Object.entries(options.photoFiles)) {
+    for (const file of files) {
+      const uploadFile = await compressImageForUpload(file);
+      const fd = new FormData();
+      fd.append(`item_${itemKey}`, uploadFile);
+
+      const res = await fetch(uploadUrl, { method: 'POST', body: fd });
+      if (res.status === 413) {
+        return {
+          ok: false,
+          status: 413,
+          data: {},
+          message: QA_PHOTO_413_MESSAGE,
+          errors: null,
+        };
+      }
+
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      if (!res.ok || data.ok !== true) {
+        return parseSubmitResponse(res, data);
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    status: 200,
+    data: { ok: true },
+    message: null,
+    errors: null,
+  };
+}
+
 function parseSubmitResponse(
   res: Response,
   data: Record<string, unknown>

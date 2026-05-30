@@ -7,6 +7,7 @@ import { getSignoffSectionDefinition, isSignoffSectionCode, type SignoffCatalogu
 import type { SignoffSectionUiState } from '@/lib/signoff-qa-v1-graph';
 import { compressImagesForUpload } from '@/lib/client-image-compression';
 import { submitQaSectionWithPhotos } from '@/lib/qa-section-submit-client';
+import { SIGNOFF_SETUP_VIDEO_ITEM } from '@/lib/signoff-qa-evidence';
 
 type Answers = Record<string, { result: string; note: string }>;
 type PhotoRow = { id: string; item_key: string; content_type: string; created_at: string | null; signed_url: string | null };
@@ -17,15 +18,34 @@ function SavedPhotos({ photos }: { photos: PhotoRow[] }) {
     <div className="space-y-1.5">
       <p className="text-xs font-medium text-gray-600">Saved evidence ({photos.length})</p>
       <div className="flex flex-wrap gap-1.5">
-        {photos.map((photo) => photo.signed_url ? (
-          <a key={photo.id} href={photo.signed_url} target="_blank" rel="noopener noreferrer">
-            <img src={photo.signed_url} alt="Evidence" className="w-14 h-14 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity" />
-          </a>
-        ) : (
-          <div key={photo.id} className="w-14 h-14 rounded border border-gray-200 bg-gray-50 flex items-center justify-center">
-            <span className="text-xs text-gray-400">No preview</span>
-          </div>
-        ))}
+        {photos.map((photo) => {
+          const isVideo = (photo.content_type || '').startsWith('video/');
+          if (!photo.signed_url) {
+            return (
+              <div key={photo.id} className="w-14 h-14 rounded border border-gray-200 bg-gray-50 flex items-center justify-center">
+                <span className="text-xs text-gray-400">No preview</span>
+              </div>
+            );
+          }
+          if (isVideo) {
+            return (
+              <a key={photo.id} href={photo.signed_url} target="_blank" rel="noopener noreferrer" className="block">
+                <video
+                  src={photo.signed_url}
+                  className="w-24 h-14 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity"
+                  muted
+                  playsInline
+                  preload="metadata"
+                />
+              </a>
+            );
+          }
+          return (
+            <a key={photo.id} href={photo.signed_url} target="_blank" rel="noopener noreferrer">
+              <img src={photo.signed_url} alt="Evidence" className="w-14 h-14 object-cover rounded border border-gray-200 hover:opacity-80 transition-opacity" />
+            </a>
+          );
+        })}
       </div>
     </div>
   );
@@ -263,6 +283,12 @@ export default function SignOffQaSectionPage() {
 
         {!loading && (
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
+            {(photosByItem[SIGNOFF_SETUP_VIDEO_ITEM] ?? []).length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                <p className="text-sm font-medium text-gray-900 mb-2">Completion video</p>
+                <SavedPhotos photos={photosByItem[SIGNOFF_SETUP_VIDEO_ITEM] ?? []} />
+              </div>
+            )}
             {items.map((item) => (
               <ItemCard
                 key={item.key}

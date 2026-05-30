@@ -1,6 +1,7 @@
 import {
   getApplicableFencingSectionCodes,
   getFencingSectionDefinition,
+  getFencingSectionItemsForSetup,
   type FencingSectionCode,
 } from './fencing-qa-v1-catalog';
 import type { FencingQaSetupV1 } from './fencing-qa-v1-types';
@@ -119,7 +120,8 @@ export function isFencingSectionCleared(
   code: FencingSectionCode,
   submission: SubmissionSnapshot | undefined,
   photoCounts: PhotoCounts,
-  issues: IssueSnapshot[]
+  issues: IssueSnapshot[],
+  setup: FencingQaSetupV1
 ): ClearResult {
   const reasons: string[] = [];
 
@@ -138,8 +140,27 @@ export function isFencingSectionCleared(
 
   const answers = submission.answers ?? {};
   const validResults = ['pass', 'fail', 'not_required'];
+  const items = getFencingSectionItemsForSetup(code, setup);
 
-  for (const item of def.items) {
+  for (const item of items) {
+    if (item.photoOnly) {
+      const result = (answers[item.key]?.result ?? '').trim();
+      if (item.allowNa && result === 'not_required') {
+        continue;
+      }
+      if (item.requirePhoto || item.requireMarkedImage) {
+        const count = photoCounts.get(photoKey(code, item.key)) ?? 0;
+        if (count < 1) {
+          reasons.push(
+            item.requireMarkedImage
+              ? `${item.label}: required marked-up image missing`
+              : `${item.label}: required photo missing`
+          );
+        }
+      }
+      continue;
+    }
+
     const result = (answers[item.key]?.result ?? '') as string;
     if (!validResults.includes(result)) {
       reasons.push(`${item.label}: answer required (pass, fail, or not_required)`);
@@ -204,13 +225,13 @@ export function computeFencingSectionUiStates(
 
   const localCleared = new Map<FencingSectionCode, boolean>();
   for (const code of codes) {
-    localCleared.set(code, isFencingSectionCleared(code, bySection.get(code), photoCounts, issues).cleared);
+    localCleared.set(code, isFencingSectionCleared(code, bySection.get(code), photoCounts, issues, setup).cleared);
   }
 
   return codes.map((code) => {
     const def = getFencingSectionDefinition(code)!;
     const sub = bySection.get(code);
-    const clearResult = isFencingSectionCleared(code, sub, photoCounts, issues);
+    const clearResult = isFencingSectionCleared(code, sub, photoCounts, issues, setup);
     const predecessors = getFencingPredecessors(code, setup);
     const blockedBy: { section: FencingSectionCode; reason: string }[] = [];
 

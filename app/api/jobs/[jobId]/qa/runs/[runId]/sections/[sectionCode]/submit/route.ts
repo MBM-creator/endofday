@@ -27,6 +27,7 @@ import {
 import {
   getApplicableFencingSectionCodes,
   getFencingSectionDefinition,
+  getFencingSectionItemsForSetup,
   isFencingSectionCode,
   type FencingSectionCode,
 } from '@/lib/fencing-qa-v1-catalog';
@@ -906,6 +907,7 @@ async function handleFencingSubmit(
 
   const sectionDef = getFencingSectionDefinition(sectionCode);
   if (!sectionDef) return serverError(requestId, 'Section definition not found');
+  const sectionItems = getFencingSectionItemsForSetup(sectionCode, setup);
 
   let formData: FormData;
   try {
@@ -954,7 +956,7 @@ async function handleFencingSubmit(
   }
 
   const photoCountByItem: Record<string, number> = {};
-  for (const item of sectionDef.items) {
+  for (const item of sectionItems) {
     const existing = photoRows.filter(
       (p) => p.section_code === sectionCode && p.item_key === item.key
     ).length;
@@ -962,7 +964,7 @@ async function handleFencingSubmit(
     photoCountByItem[item.key] = existing + incoming;
   }
 
-  const payloadCheck = validateCrewSectionPayloadIrrigation(sectionDef.items, answers, photoCountByItem);
+  const payloadCheck = validateCrewSectionPayloadIrrigation(sectionItems, answers, photoCountByItem);
   if (!payloadCheck.ok) {
     return NextResponse.json(
       { ok: false, message: 'Validation failed', errors: payloadCheck.errors },

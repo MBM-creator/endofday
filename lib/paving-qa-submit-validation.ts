@@ -110,6 +110,24 @@ export function validateCrewSectionPayloadIrrigation(
   const errors: string[] = [];
 
   for (const item of items) {
+    if ('photoOnly' in item && item.photoOnly) {
+      const result = (answers[item.key]?.result ?? '').trim();
+      if (item.allowNa && result === 'not_required') {
+        continue;
+      }
+      if (item.requirePhoto || item.requireMarkedImage) {
+        const n = photoCountByItem[item.key] ?? 0;
+        if (n < 1) {
+          errors.push(
+            item.requireMarkedImage
+              ? `Item "${item.label}": at least one marked-up image required`
+              : `Item "${item.label}": at least one photo required`
+          );
+        }
+      }
+      continue;
+    }
+
     const a = answers[item.key];
     const result = (a?.result ?? '').trim() as V2ItemResult | '';
 
