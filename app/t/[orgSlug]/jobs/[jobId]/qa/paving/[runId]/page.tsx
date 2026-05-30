@@ -14,6 +14,11 @@ import {
 import { isOtherMixedMethod } from '@/lib/paving-qa-v2-catalog';
 import type { V2SectionUiState } from '@/lib/paving-qa-v2-graph';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
+import {
+  findActiveQaSectionCode,
+  getQaSectionCardClass,
+  resolveQaSectionCardTone,
+} from '@/lib/qa-section-card-style';
 
 interface SectionState {
   section: PavingSectionCode;
@@ -45,7 +50,6 @@ export default function PavingQaRunOverviewPage() {
   const [v2SectionStates, setV2SectionStates] = useState<V2SectionUiState[]>([]);
   const [job, setJob] = useState<JobContext | null>(null);
   const [runStatus, setRunStatus] = useState<string>('');
-  const [finalAt, setFinalAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,7 +66,6 @@ export default function PavingQaRunOverviewPage() {
         }
         setJob(d.job && typeof d.job === 'object' ? d.job : null);
         setRunStatus(String(d.run?.status ?? ''));
-        setFinalAt(d.run?.supervisor_final_approved_at ?? null);
         setSetupVersion(typeof d.setupVersion === 'number' ? d.setupVersion : null);
         if (d.setupVersion === 2 && d.setup && typeof d.setup === 'object') {
           setSetupV2(d.setup as PavingQaSetupV2);
@@ -108,7 +111,6 @@ export default function PavingQaRunOverviewPage() {
             emptyText="No Client Connect project linked."
           />
         )}
-        {finalAt && <p className="text-sm text-[#698F00] mt-1">Final approval recorded.</p>}
 
         {error && (
           <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{error}</div>
@@ -137,11 +139,21 @@ export default function PavingQaRunOverviewPage() {
             </div>
 
             <ul className="mt-6 space-y-2">
-              {sectionStates.map((s) => {
+              {(() => {
+                const activeSectionCode = findActiveQaSectionCode(sectionStates, (s) => s.section);
+                return sectionStates.map((s) => {
                 const def = getSectionDef(s.section);
                 const title = def?.title ?? s.section;
+                const cardTone = resolveQaSectionCardTone({
+                  cleared: s.cleared,
+                  activated: Boolean(s.crewSubmittedAt || s.submissionStatus),
+                  isActiveStep: s.section === activeSectionCode,
+                });
                 return (
-                  <li key={s.section} className="border border-gray-200 rounded-lg bg-white p-4 shadow-sm">
+                  <li
+                    key={s.section}
+                    className={`border rounded-lg p-4 shadow-sm ${getQaSectionCardClass(cardTone)}`}
+                  >
                     <div className="flex flex-wrap justify-between gap-2">
                       <span className="font-medium text-gray-900">{title}</span>
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -178,7 +190,8 @@ export default function PavingQaRunOverviewPage() {
                     </Link>
                   </li>
                 );
-              })}
+              });
+              })()}
             </ul>
           </>
         )}
@@ -214,6 +227,7 @@ function V2RunOverview({
   runId: string;
 }) {
   const otherMixed = isOtherMixedMethod(setup);
+  const activeSectionCode = findActiveQaSectionCode(sectionStates, (s) => s.code);
 
   return (
     <div className="mt-6 space-y-4">
@@ -286,10 +300,18 @@ function V2RunOverview({
           {sectionStates.map((s, index) => {
             const cfg = STATUS_CONFIG[s.status] ?? STATUS_CONFIG.pending;
             const href = `/t/${orgSlug}/jobs/${jobId}/qa/paving/${runId}/${encodeURIComponent(s.code)}`;
+            const cardTone = resolveQaSectionCardTone({
+              cleared: s.cleared,
+              activated:
+                s.status === 'submitted' ||
+                s.status === 'issue_raised' ||
+                Boolean(s.submissionStatus),
+              isActiveStep: s.code === activeSectionCode,
+            });
             return (
               <li
                 key={s.code}
-                className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm"
+                className={`border rounded-lg p-4 shadow-sm ${getQaSectionCardClass(cardTone)}`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">

@@ -6,6 +6,7 @@ import { loadQaRunBundle } from '@/lib/qa-run-bundle';
 import { computeV2SectionUiStates } from '@/lib/paving-qa-v2-graph';
 import { computeIrrigationSectionUiStates } from '@/lib/irrigation-qa-v1-graph';
 import { computeFencingSectionUiStates } from '@/lib/fencing-qa-v1-graph';
+import { computeSignoffSectionUiStates } from '@/lib/signoff-qa-v1-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -76,6 +77,29 @@ export async function GET(
       job: v.job,
       run: typedBundle.run,
       qaType: 'fencing',
+      setupVersion: 1,
+      setup: typedBundle.setup,
+      sectionStates,
+      issues: typedBundle.issues,
+      submissions: typedBundle.submissions,
+      photoRows: typedBundle.photoRows,
+    });
+    res.headers.set('x-request-id', requestId);
+    return res;
+  }
+
+  if (typedBundle.ok && typedBundle.qaType === 'sign_off') {
+    const sectionStates = computeSignoffSectionUiStates(
+      typedBundle.setup,
+      typedBundle.submissions,
+      typedBundle.photoRows,
+      typedBundle.issues
+    );
+    const res = NextResponse.json({
+      ok: true,
+      job: v.job,
+      run: typedBundle.run,
+      qaType: 'sign_off',
       setupVersion: 1,
       setup: typedBundle.setup,
       sectionStates,

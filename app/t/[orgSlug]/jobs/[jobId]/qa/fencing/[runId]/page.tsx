@@ -6,6 +6,11 @@ import { useEffect, useState } from 'react';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { FENCING_FENCE_TYPE_LABELS, type FencingQaSetupV1 } from '@/lib/fencing-qa-v1-types';
 import type { FencingSectionUiState } from '@/lib/fencing-qa-v1-graph';
+import {
+  findActiveQaSectionCode,
+  getQaSectionCardClass,
+  resolveQaSectionCardTone,
+} from '@/lib/qa-section-card-style';
 
 interface JobContext {
   cc_project_id?: string | null;
@@ -39,7 +44,6 @@ export default function FencingQaRunOverviewPage() {
   const [sectionStates, setSectionStates] = useState<FencingSectionUiState[]>([]);
   const [job, setJob] = useState<JobContext | null>(null);
   const [runStatus, setRunStatus] = useState('');
-  const [finalAt, setFinalAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,7 +60,6 @@ export default function FencingQaRunOverviewPage() {
         }
         setJob(d.job && typeof d.job === 'object' ? d.job : null);
         setRunStatus(String(d.run?.status ?? ''));
-        setFinalAt(d.run?.supervisor_final_approved_at ?? null);
         setSetup(d.setup as FencingQaSetupV1);
         setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
       })
@@ -68,6 +71,17 @@ export default function FencingQaRunOverviewPage() {
       cancelled = true;
     };
   }, [orgSlug, jobId, runId]);
+
+  const activeSectionCode = findActiveQaSectionCode(sectionStates, (section) => section.code);
+
+  function sectionActivated(section: FencingSectionUiState): boolean {
+    return (
+      Boolean(section.submissionStatus || section.submittedAt) ||
+      ['submitted', 'issue_raised', 'rectification_required', 'rectified_awaiting_supervisor', 'supervisor_approved_to_proceed'].includes(
+        section.status
+      )
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -81,7 +95,6 @@ export default function FencingQaRunOverviewPage() {
         </div>
         <p className="text-sm text-gray-600 mt-1">Status: {runStatus || '…'}</p>
         {job && <ClientConnectJobSummary job={job} compact className="mt-1" emptyText="No Client Connect project linked." />}
-        {finalAt && <p className="text-sm text-[#698F00] mt-1">Final approval recorded.</p>}
         {error && <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{error}</div>}
         {loading && <p className="mt-4 text-gray-600">Loading…</p>}
 
@@ -120,8 +133,13 @@ export default function FencingQaRunOverviewPage() {
               <ul className="space-y-2">
                 {sectionStates.map((section, index) => {
                   const cfg = STATUS_CONFIG[section.status] ?? STATUS_CONFIG.pending;
+                  const cardTone = resolveQaSectionCardTone({
+                    cleared: section.cleared,
+                    activated: sectionActivated(section),
+                    isActiveStep: section.code === activeSectionCode,
+                  });
                   return (
-                    <li key={section.code} className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+                    <li key={section.code} className={`border rounded-lg p-4 shadow-sm ${getQaSectionCardClass(cardTone)}`}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
                           <span className="mt-0.5 flex-none w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs font-medium flex items-center justify-center">{index + 1}</span>

@@ -30,15 +30,12 @@ export default function PavingQaSupervisorPage() {
   const runId = (params?.runId as string) ?? '';
 
   const [issues, setIssues] = useState<IssueRow[]>([]);
-  const [run, setRun] = useState<{ status: string; supervisor_final_approved_at: string | null } | null>(null);
-  const [sectionStates, setSectionStates] = useState<{ section: string; cleared: boolean }[]>([]);
   const [setupVersion, setSetupVersion] = useState<number | null>(null);
   const [photoRows, setPhotoRows] = useState<{ section_code: string; item_key: string }[]>([]);
   const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [finalBusy, setFinalBusy] = useState(false);
   const [proceedReason, setProceedReason] = useState('');
 
   const refresh = useCallback(async () => {
@@ -53,8 +50,6 @@ export default function PavingQaSupervisorPage() {
       setStaffRole(me.staff.role as StaffRole);
     }
     setIssues(Array.isArray(d.issues) ? d.issues : []);
-    setRun({ status: d.run?.status, supervisor_final_approved_at: d.run?.supervisor_final_approved_at ?? null });
-    setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
     setSetupVersion(typeof d.setupVersion === 'number' ? d.setupVersion : null);
     setPhotoRows(Array.isArray(d.photoRows) ? d.photoRows : []);
   }, [jobId, orgSlug, runId]);
@@ -100,28 +95,6 @@ export default function PavingQaSupervisorPage() {
     }
   }
 
-  async function finalApprove() {
-    setFinalBusy(true);
-    setErr(null);
-    try {
-      const res = await fetch(
-        `/api/jobs/${jobId}/qa/runs/${runId}/final-approval?orgSlug=${encodeURIComponent(orgSlug)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) }
-      );
-      const d = await res.json();
-      if (!res.ok) {
-        setErr(typeof d?.message === 'string' ? d.message : 'Final approval failed');
-        return;
-      }
-      await refresh();
-    } catch {
-      setErr('Final approval failed');
-    } finally {
-      setFinalBusy(false);
-    }
-  }
-
-  const allCleared = sectionStates.length > 0 && sectionStates.every((s) => s.cleared);
   const openIssues = issues.filter((i) => ['open', 'rectification_required', 'evidence_requested'].includes(i.status));
   const canSupervise = staffRole === 'supervisor' || staffRole === 'admin';
 
@@ -142,11 +115,7 @@ export default function PavingQaSupervisorPage() {
         {err && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">{err}</div>}
         {loading && <p className="mt-4 text-gray-600">Loading…</p>}
 
-        {!loading && run?.supervisor_final_approved_at && (
-          <p className="mt-4 text-[#698F00] font-medium">This run has final approval recorded.</p>
-        )}
-
-        {!loading && !run?.supervisor_final_approved_at && (
+        {!loading && (
           <>
             <h2 className="mt-8 text-lg font-semibold text-gray-900">Open issues</h2>
             <ul className="mt-2 space-y-3">
@@ -229,20 +198,6 @@ export default function PavingQaSupervisorPage() {
                 />
               </div>
             )}
-
-            <h2 className="mt-10 text-lg font-semibold text-gray-900">Final approval</h2>
-            <p className="text-sm text-gray-600 mt-1">
-              Available when every applicable section is cleared and the run is still active.
-            </p>
-            <button
-              type="button"
-              disabled={finalBusy || !canSupervise || !allCleared || run?.status !== 'active'}
-              className="mt-3 px-4 py-2 bg-[#698F00] text-white rounded-lg font-medium disabled:bg-gray-400"
-              onClick={() => finalApprove()}
-            >
-              {finalBusy ? 'Saving…' : 'Record final approval'}
-            </button>
-            {!allCleared && <p className="mt-2 text-xs text-amber-800">Not all sections are cleared yet.</p>}
           </>
         )}
       </div>

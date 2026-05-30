@@ -4,13 +4,8 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
-import {
-  IRRIGATION_QA_TYPE_LABELS,
-  IRRIGATION_SYSTEM_TYPE_LABELS,
-  IRRIGATION_WATER_SOURCE_LABELS,
-  type IrrigationQaSetupV1,
-} from '@/lib/irrigation-qa-v1-types';
-import type { IrrigationSectionUiState } from '@/lib/irrigation-qa-v1-graph';
+import type { SignoffQaSetupV1 } from '@/lib/signoff-qa-v1-types';
+import type { SignoffSectionUiState } from '@/lib/signoff-qa-v1-graph';
 import {
   findActiveQaSectionCode,
   getQaSectionCardClass,
@@ -35,16 +30,17 @@ const STATUS_CONFIG: Record<string, { label: string; pill: string }> = {
   blocked_by_unresolved_issue: { label: 'Blocked', pill: 'bg-amber-50 text-amber-900' },
 };
 
-export default function IrrigationQaRunOverviewPage() {
+export default function SignOffQaRunOverviewPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
   const jobId = (params?.jobId as string) ?? '';
   const runId = (params?.runId as string) ?? '';
 
-  const [setup, setSetup] = useState<IrrigationQaSetupV1 | null>(null);
-  const [sectionStates, setSectionStates] = useState<IrrigationSectionUiState[]>([]);
+  const [setup, setSetup] = useState<SignoffQaSetupV1 | null>(null);
+  const [sectionStates, setSectionStates] = useState<SignoffSectionUiState[]>([]);
   const [job, setJob] = useState<JobContext | null>(null);
   const [runStatus, setRunStatus] = useState('');
+  const [finalAt, setFinalAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,16 +51,17 @@ export default function IrrigationQaRunOverviewPage() {
       .then((r) => r.json().then((d) => ({ r, d })))
       .then(({ r, d }) => {
         if (cancelled) return;
-        if (!r.ok || d.qaType !== 'irrigation') {
-          setError(typeof d?.message === 'string' ? d.message : 'Failed to load irrigation QA');
+        if (!r.ok || d.qaType !== 'sign_off') {
+          setError(typeof d?.message === 'string' ? d.message : 'Failed to load supervisor sign-off');
           return;
         }
         setJob(d.job && typeof d.job === 'object' ? d.job : null);
         setRunStatus(String(d.run?.status ?? ''));
-        setSetup(d.setup as IrrigationQaSetupV1);
+        setFinalAt(d.run?.supervisor_final_approved_at ?? null);
+        setSetup(d.setup as SignoffQaSetupV1);
         setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
       })
-      .catch(() => setError('Failed to load irrigation QA'))
+      .catch(() => setError('Failed to load supervisor sign-off'))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
@@ -73,11 +70,9 @@ export default function IrrigationQaRunOverviewPage() {
     };
   }, [orgSlug, jobId, runId]);
 
-  const controllerOnly = setup?.system_types.includes('controller_only') &&
-    setup.system_types.every((type) => type === 'controller_only');
   const activeSectionCode = findActiveQaSectionCode(sectionStates, (section) => section.code);
 
-  function sectionActivated(section: IrrigationSectionUiState): boolean {
+  function sectionActivated(section: SignoffSectionUiState): boolean {
     return (
       Boolean(section.submissionStatus || section.submittedAt) ||
       ['submitted', 'issue_raised', 'rectification_required', 'rectified_awaiting_supervisor', 'supervisor_approved_to_proceed'].includes(
@@ -92,49 +87,37 @@ export default function IrrigationQaRunOverviewPage() {
         <Link href={`/t/${orgSlug}/jobs/${jobId}/qa`} className="text-sm text-[#698F00] hover:underline">
           ← QA checks
         </Link>
-        <div className="flex items-center gap-3 mt-2">
-          <h1 className="text-2xl font-bold text-gray-900">Irrigation QA run</h1>
-          <span className="px-2 py-0.5 text-xs font-semibold rounded-full bg-[#698F00]/10 text-[#698F00] border border-[#698F00]/20">v1</span>
-        </div>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Supervisor sign-off</h1>
         <p className="text-sm text-gray-600 mt-1">Status: {runStatus || '…'}</p>
         {job && <ClientConnectJobSummary job={job} compact className="mt-1" emptyText="No Client Connect project linked." />}
+        {finalAt && <p className="text-sm text-[#698F00] mt-1">Final approval recorded.</p>}
         {error && <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">{error}</div>}
         {loading && <p className="mt-4 text-gray-600">Loading…</p>}
 
         {!loading && !error && setup && (
           <div className="mt-6 space-y-4">
-            <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-3">
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Setup summary</h2>
-              <dl className="space-y-2 text-sm">
-                <div className="flex flex-col sm:flex-row sm:gap-4">
-                  <dt className="text-gray-500 sm:w-44 shrink-0">Irrigation type</dt>
-                  <dd className="font-medium text-gray-900">{IRRIGATION_QA_TYPE_LABELS[setup.irrigation_type]}</dd>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:gap-4">
-                  <dt className="text-gray-500 sm:w-44 shrink-0">Water source</dt>
-                  <dd className="font-medium text-gray-900">{setup.water_sources.map((s) => IRRIGATION_WATER_SOURCE_LABELS[s]).join(', ')}</dd>
-                </div>
-                <div className="flex flex-col sm:flex-row sm:gap-4">
-                  <dt className="text-gray-500 sm:w-44 shrink-0">System type</dt>
-                  <dd className="font-medium text-gray-900">{setup.system_types.map((s) => IRRIGATION_SYSTEM_TYPE_LABELS[s]).join(', ')}</dd>
-                </div>
-                {setup.supervisor_notes && (
-                  <div className="flex flex-col sm:flex-row sm:gap-4">
-                    <dt className="text-gray-500 sm:w-44 shrink-0">Supervisor notes</dt>
-                    <dd className="font-medium text-gray-900">{setup.supervisor_notes}</dd>
-                  </div>
-                )}
-              </dl>
-            </div>
-
-            {controllerOnly && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-900">
-                Controller-only setup: physical install sections are excluded from this run unless another system type is also selected.
+            {(setup.scope_description || setup.supervisor_notes) && (
+              <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-3">
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">Setup summary</h2>
+                <dl className="space-y-2 text-sm">
+                  {setup.scope_description && (
+                    <div className="flex flex-col sm:flex-row sm:gap-4">
+                      <dt className="text-gray-500 sm:w-44 shrink-0">Scope</dt>
+                      <dd className="font-medium text-gray-900">{setup.scope_description}</dd>
+                    </div>
+                  )}
+                  {setup.supervisor_notes && (
+                    <div className="flex flex-col sm:flex-row sm:gap-4">
+                      <dt className="text-gray-500 sm:w-44 shrink-0">Supervisor notes</dt>
+                      <dd className="font-medium text-gray-900">{setup.supervisor_notes}</dd>
+                    </div>
+                  )}
+                </dl>
               </div>
             )}
 
             <div>
-              <h2 className="text-sm font-semibold text-gray-700 mb-2">Applicable QA sections ({sectionStates.length})</h2>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2">Sign-off section</h2>
               <ul className="space-y-2">
                 {sectionStates.map((section, index) => {
                   const cfg = STATUS_CONFIG[section.status] ?? STATUS_CONFIG.pending;
@@ -155,18 +138,13 @@ export default function IrrigationQaRunOverviewPage() {
                         </div>
                         <span className={`flex-none px-2 py-0.5 text-xs rounded-full whitespace-nowrap ${cfg.pill}`}>{cfg.label}</span>
                       </div>
-                      {section.blockedBy && (
-                        <ul className="mt-2 text-xs text-amber-800 list-disc pl-10 space-y-0.5">
-                          {section.blockedBy.map((b) => <li key={`${b.section}:${b.reason}`}>{b.reason}</li>)}
-                        </ul>
-                      )}
                       {!section.cleared && section.clearReasons.length > 0 && (
                         <ul className="mt-2 text-xs text-gray-600 list-disc pl-10 space-y-0.5">
                           {section.clearReasons.slice(0, 4).map((r) => <li key={r}>{r}</li>)}
                         </ul>
                       )}
-                      <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${runId}/${encodeURIComponent(section.code)}`} className="mt-3 inline-block text-xs text-[#698F00] font-medium hover:underline pl-9">
-                        {section.status === 'blocked_by_unresolved_issue' ? 'View blocking reasons →' : 'Open section →'}
+                      <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/sign-off/${runId}/${encodeURIComponent(section.code)}`} className="mt-3 inline-block text-xs text-[#698F00] font-medium hover:underline pl-9">
+                        Open section →
                       </Link>
                     </li>
                   );
@@ -175,7 +153,7 @@ export default function IrrigationQaRunOverviewPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-4 pt-2">
-              <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${runId}/supervisor`} className="text-sm font-medium text-[#698F00] hover:underline">Supervisor →</Link>
+              <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/sign-off/${runId}/supervisor`} className="text-sm font-medium text-[#698F00] hover:underline">Supervisor →</Link>
               <Link href={`/t/${orgSlug}/jobs/${jobId}/qa`} className="text-sm text-[#698F00] hover:underline">← Back to QA hub</Link>
             </div>
           </div>

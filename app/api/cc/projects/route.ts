@@ -11,7 +11,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const projects = await fetchCcProjects(requestId);
-    const res = NextResponse.json({ ok: true, projects });
+    const portalBaseUrl = process.env.CC_BASE_URL?.replace(/\/+$/, '') ?? null;
+    const res = NextResponse.json({ ok: true, projects, portalBaseUrl });
     res.headers.set('x-request-id', requestId);
     return res;
   } catch (err) {

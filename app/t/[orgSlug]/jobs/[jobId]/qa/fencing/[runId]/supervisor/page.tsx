@@ -38,14 +38,11 @@ export default function FencingQaSupervisorPage() {
   const runId = (params?.runId as string) ?? '';
 
   const [issues, setIssues] = useState<IssueRow[]>([]);
-  const [run, setRun] = useState<{ status: string; supervisor_final_approved_at: string | null } | null>(null);
-  const [sectionStates, setSectionStates] = useState<{ code: string; cleared: boolean }[]>([]);
   const [photoRows, setPhotoRows] = useState<{ section_code: string; item_key: string }[]>([]);
   const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [finalBusy, setFinalBusy] = useState(false);
   const [proceedReason, setProceedReason] = useState('');
 
   const refresh = useCallback(async () => {
@@ -58,8 +55,6 @@ export default function FencingQaSupervisorPage() {
     if (!res.ok || !d?.ok || d.qaType !== 'fencing') throw new Error(d?.message ?? 'load');
     if (meRes.ok && me?.staff?.role) setStaffRole(me.staff.role as StaffRole);
     setIssues(Array.isArray(d.issues) ? d.issues : []);
-    setRun({ status: d.run?.status, supervisor_final_approved_at: d.run?.supervisor_final_approved_at ?? null });
-    setSectionStates(Array.isArray(d.sectionStates) ? d.sectionStates : []);
     setPhotoRows(Array.isArray(d.photoRows) ? d.photoRows : []);
   }, [jobId, orgSlug, runId]);
 
@@ -101,30 +96,7 @@ export default function FencingQaSupervisorPage() {
     }
   }
 
-  async function finalApprove() {
-    setFinalBusy(true);
-    setErr(null);
-    try {
-      const res = await fetch(`/api/jobs/${jobId}/qa/runs/${runId}/final-approval?orgSlug=${encodeURIComponent(orgSlug)}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const d = await res.json();
-      if (!res.ok) {
-        setErr(typeof d?.message === 'string' ? d.message : 'Final approval failed');
-        return;
-      }
-      await refresh();
-    } catch {
-      setErr('Final approval failed');
-    } finally {
-      setFinalBusy(false);
-    }
-  }
-
   const openIssues = issues.filter((issue) => ['open', 'rectification_required', 'evidence_requested'].includes(issue.status));
-  const allCleared = sectionStates.length > 0 && sectionStates.every((section) => section.cleared);
   const canSupervise = staffRole === 'supervisor' || staffRole === 'admin';
 
   return (
@@ -143,9 +115,8 @@ export default function FencingQaSupervisorPage() {
         )}
         {err && <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded text-sm text-red-800">{err}</div>}
         {loading && <p className="mt-4 text-gray-600">Loading…</p>}
-        {!loading && run?.supervisor_final_approved_at && <p className="mt-4 text-[#698F00] font-medium">This run has final approval recorded.</p>}
 
-        {!loading && !run?.supervisor_final_approved_at && (
+        {!loading && (
           <>
             <h2 className="mt-8 text-lg font-semibold text-gray-900">Open issues</h2>
             <ul className="mt-2 space-y-3">
@@ -182,13 +153,6 @@ export default function FencingQaSupervisorPage() {
                 <textarea className="w-full mt-1 border border-gray-300 rounded px-2 py-1 text-sm" rows={2} value={proceedReason} onChange={(e) => setProceedReason(e.target.value)} />
               </div>
             )}
-
-            <h2 className="mt-10 text-lg font-semibold text-gray-900">Final approval</h2>
-            <p className="text-sm text-gray-600 mt-1">Available when every applicable fencing section is cleared and the run is still active.</p>
-            <button type="button" disabled={finalBusy || !canSupervise || !allCleared || run?.status !== 'active'} className="mt-3 px-4 py-2 bg-[#698F00] text-white rounded-lg font-medium disabled:bg-gray-400" onClick={() => finalApprove()}>
-              {finalBusy ? 'Saving…' : 'Record final approval'}
-            </button>
-            {!allCleared && <p className="mt-2 text-xs text-amber-800">Not all fencing sections are cleared yet.</p>}
           </>
         )}
       </div>

@@ -562,7 +562,6 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
         criticalOnFail: true,
       }),
       item('supervisor_signoff', 'Final supervisor completion review has been completed', {
-        requirePhoto: true,
         criticalOnFail: true,
       }),
     ],

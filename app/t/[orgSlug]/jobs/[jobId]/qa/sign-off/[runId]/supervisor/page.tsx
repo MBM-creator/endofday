@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
-import { getIrrigationSectionDefinition, isIrrigationSectionCode, type IrrigationSectionCode } from '@/lib/irrigation-qa-v1-catalog';
+import { getSignoffSectionDefinition, isSignoffSectionCode, type SignoffSectionCode } from '@/lib/signoff-qa-v1-catalog';
 
 interface IssueRow {
   id: string;
@@ -17,8 +17,8 @@ interface IssueRow {
 type StaffRole = 'field' | 'supervisor' | 'admin';
 
 function sectionLabel(code: string): string {
-  return isIrrigationSectionCode(code)
-    ? getIrrigationSectionDefinition(code as IrrigationSectionCode)?.title ?? code
+  return isSignoffSectionCode(code)
+    ? getSignoffSectionDefinition(code as SignoffSectionCode)?.title ?? code
     : code;
 }
 
@@ -31,7 +31,7 @@ function issueStatusLabel(status: string): string {
   return status.replace(/_/g, ' ');
 }
 
-export default function IrrigationQaSupervisorPage() {
+export default function SignOffQaSupervisorPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
   const jobId = (params?.jobId as string) ?? '';
@@ -52,7 +52,7 @@ export default function IrrigationQaSupervisorPage() {
     ]);
     const d = await res.json();
     const me = await meRes.json();
-    if (!res.ok || !d?.ok || d.qaType !== 'irrigation') throw new Error(d?.message ?? 'load');
+    if (!res.ok || !d?.ok || d.qaType !== 'sign_off') throw new Error(d?.message ?? 'load');
     if (meRes.ok && me?.staff?.role) setStaffRole(me.staff.role as StaffRole);
     setIssues(Array.isArray(d.issues) ? d.issues : []);
     setPhotoRows(Array.isArray(d.photoRows) ? d.photoRows : []);
@@ -102,10 +102,10 @@ export default function IrrigationQaSupervisorPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${runId}`} className="text-sm text-[#698F00] hover:underline">
+        <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/sign-off/${runId}`} className="text-sm text-[#698F00] hover:underline">
           ← Run overview
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-gray-900">Irrigation QA supervisor</h1>
+        <h1 className="mt-2 text-2xl font-bold text-gray-900">Supervisor sign-off</h1>
         <p className="text-sm text-gray-600 mt-1">Actions are recorded under your signed-in staff account.</p>
 
         {!loading && !canSupervise && (
@@ -131,7 +131,7 @@ export default function IrrigationQaSupervisorPage() {
                     </div>
                     <p className="text-gray-500 text-xs mt-0.5">{sectionLabel(issue.section_code)}</p>
                     <p className="text-gray-600 mt-0.5 capitalize">{issue.severity.replace(/_/g, ' ')} · {issueStatusLabel(issue.status)}</p>
-                    <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${runId}/${encodeURIComponent(issue.section_code)}`} className="inline-block mt-1.5 text-xs text-[#698F00] hover:underline">
+                    <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/sign-off/${runId}/${encodeURIComponent(issue.section_code)}`} className="inline-block mt-1.5 text-xs text-[#698F00] hover:underline">
                       View section evidence →
                     </Link>
                     {canSupervise && (

@@ -6,9 +6,11 @@ import { validateIrrigationSetupV1 } from '@/lib/irrigation-qa-v1-setup';
 import type { IrrigationQaSetupV1 } from '@/lib/irrigation-qa-v1-types';
 import { validateFencingSetupV1 } from '@/lib/fencing-qa-v1-setup';
 import type { FencingQaSetupV1 } from '@/lib/fencing-qa-v1-types';
+import { validateSignoffSetupV1 } from '@/lib/signoff-qa-v1-setup';
+import type { SignoffQaSetupV1 } from '@/lib/signoff-qa-v1-types';
 import type { IssueSnapshot, SubmissionSnapshot } from '@/lib/paving-qa-v1-graph';
 
-export type QaType = 'paving' | 'irrigation' | 'fencing';
+export type QaType = 'paving' | 'irrigation' | 'fencing' | 'sign_off';
 
 export type QaRunRow = {
   id: string;
@@ -56,11 +58,18 @@ export type FencingRunBundleV1 = BundleBase & {
   setup: FencingQaSetupV1;
 };
 
+export type SignoffRunBundleV1 = BundleBase & {
+  qaType: 'sign_off';
+  version: 1;
+  setup: SignoffQaSetupV1;
+};
+
 export type QaRunBundle =
   | PavingRunBundleV1
   | PavingRunBundleV2
   | IrrigationRunBundleV1
   | FencingRunBundleV1
+  | SignoffRunBundleV1
   | { ok: false; code: 'NOT_FOUND' };
 
 export async function loadQaRunBundle(runId: string, jobId: string): Promise<QaRunBundle> {
@@ -82,7 +91,9 @@ export async function loadQaRunBundle(runId: string, jobId: string): Promise<QaR
         ? 'irrigation'
         : (run as { qa_type?: string | null }).qa_type === 'fencing'
           ? 'fencing'
-          : 'paving'
+          : (run as { qa_type?: string | null }).qa_type === 'sign_off'
+            ? 'sign_off'
+            : 'paving'
     ) as QaType,
   } satisfies QaRunRow;
 
@@ -140,6 +151,21 @@ export async function loadQaRunBundle(runId: string, jobId: string): Promise<QaR
     return {
       ok: true,
       qaType: 'fencing',
+      version: 1,
+      run: runRow,
+      setup: parsed.setup,
+      submissions,
+      issues,
+      photoRows: photos,
+    };
+  }
+
+  if (runRow.qa_type === 'sign_off') {
+    const parsed = validateSignoffSetupV1(run.setup);
+    if (!parsed.ok) return { ok: false, code: 'NOT_FOUND' };
+    return {
+      ok: true,
+      qaType: 'sign_off',
       version: 1,
       run: runRow,
       setup: parsed.setup,

@@ -7,7 +7,7 @@ import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
 import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
-import { ccClientDisplayName } from '@/lib/cc-client-display';
+import { ccClientDisplayName, ccProjectPickerLabel } from '@/lib/cc-client-display';
 import { compressImageForUpload } from '@/lib/client-image-compression';
 
 interface Job {
@@ -163,6 +163,19 @@ function stageQaHref(
   return `/t/${orgSlug}/jobs/${jobId}/qa/${type}/new?stageId=${encodeURIComponent(stageId)}`;
 }
 
+function stageSignOffHref(
+  orgSlug: string,
+  jobId: string,
+  stageId: string,
+  qaRuns: QaRun[]
+): string {
+  const activeRun = qaRuns.find((run) => run.status === 'active' && run.qa_type === 'sign_off');
+  if (activeRun) {
+    return `/t/${orgSlug}/jobs/${jobId}/qa/sign-off/${activeRun.id}`;
+  }
+  return `/t/${orgSlug}/jobs/${jobId}/qa/sign-off/new?stageId=${encodeURIComponent(stageId)}`;
+}
+
 export default function JobDetailPage() {
   const params = useParams();
   const orgSlug = (params?.orgSlug as string) ?? '';
@@ -200,6 +213,7 @@ export default function JobDetailPage() {
   const [qaRunsError, setQaRunsError] = useState<string | null>(null);
 
   const [ccProjects, setCcProjects] = useState<CcProject[]>([]);
+  const [ccPortalBaseUrl, setCcPortalBaseUrl] = useState<string | null>(null);
   const [ccProjectsLoading, setCcProjectsLoading] = useState(false);
   const [ccProjectsError, setCcProjectsError] = useState<string | null>(null);
   const [ccSelectedProjectId, setCcSelectedProjectId] = useState<string>('');
@@ -329,7 +343,7 @@ export default function JobDetailPage() {
     setCcMappingError(null);
     fetch('/api/cc/projects')
       .then((res) => res.json().then((data) => ({ res, data })))
-      .then(({ res, data }: { res: Response; data: { ok?: boolean; projects?: CcProject[]; error?: string } }) => {
+      .then(({ res, data }: { res: Response; data: { ok?: boolean; projects?: CcProject[]; portalBaseUrl?: string | null; error?: string } }) => {
         if (cancelled) return;
         if (!res.ok || !data?.ok || !Array.isArray(data.projects)) {
           setCcProjectsError(
@@ -340,6 +354,7 @@ export default function JobDetailPage() {
           return;
         }
         setCcProjects(data.projects);
+        setCcPortalBaseUrl(typeof data.portalBaseUrl === 'string' ? data.portalBaseUrl : null);
         const suggestion = findSuggestedCcProject(job, data.projects);
         if (suggestion) {
           setCcSelectedProjectId(suggestion.project_id);
@@ -791,11 +806,7 @@ export default function JobDetailPage() {
   const selectedCcProject = selectedCcProjectId
     ? selectableCcProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
     : null;
-  const connectedProjectTitle =
-    selectedCcProject?.project_title ?? job?.cc_project_title_snapshot ?? '';
-  const connectedClientName =
-    selectedCcProject ? ccClientDisplayName(selectedCcProject) : job?.cc_client_name_snapshot ?? '';
-  const currentQaRuns = qaRuns.filter((run) => run.qa_type === 'irrigation' || run.qa_type === 'fencing' || run.setup_version === 2);
+  const currentQaRuns = qaRuns.filter((run) => run.qa_type === 'irrigation' || run.qa_type === 'fencing' || run.qa_type === 'sign_off' || run.setup_version === 2);
   const activeQaRun = currentQaRuns.find((run) => run.status === 'active') ?? null;
   const approvedQaRun =
     currentQaRuns.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
@@ -899,8 +910,7 @@ export default function JobDetailPage() {
                     <option value="">Not linked</option>
                     {selectableCcProjects.map((project) => (
                       <option key={project.project_id} value={project.project_id}>
-                        {project.project_title} — {ccClientDisplayName(project)}
-                        {project.site_address ? ` — ${project.site_address}` : ''} ({project.status})
+                        {ccProjectPickerLabel(project)}
                       </option>
                     ))}
                   </select>
@@ -908,30 +918,6 @@ export default function JobDetailPage() {
                     <p className="mt-1 text-xs text-gray-500">
                       Select a different project to replace the saved link.
                     </p>
-                  )}
-                  {(connectedProjectTitle || connectedClientName) && (
-                    <div className="mt-3 grid gap-2">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Project name
-                        </label>
-                        <input
-                          value={connectedProjectTitle}
-                          readOnly
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Client name
-                        </label>
-                        <input
-                          value={connectedClientName}
-                          readOnly
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-900 bg-gray-50"
-                        />
-                      </div>
-                    </div>
                   )}
                   </div>
                 ) : (
@@ -1001,7 +987,11 @@ export default function JobDetailPage() {
                       </div>
                     )}
                   </div>
-                  <ClientConnectVariationsSummary variations={selectedCcProject.variations} />
+                  <ClientConnectVariationsSummary
+                    variations={selectedCcProject.variations}
+                    quoteId={selectedCcProject.quote_id}
+                    portalBaseUrl={ccPortalBaseUrl}
+                  />
                 </div>
               )}
             </section>
@@ -1080,6 +1070,63 @@ export default function JobDetailPage() {
               </>
             )}
 
+            <h2 className="text-lg font-semibold text-gray-900 mb-3 mt-8">
+              Pre-commencement photos ({photos.length}/{MAX_PHOTOS})
+            </h2>
+            {photosLoading && (
+              <p className="text-gray-600">Loading photos…</p>
+            )}
+            {!photosLoading && photosError && (
+              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
+                {photosError}
+              </div>
+            )}
+            {!photosLoading && photos.length > 0 && (
+              <div className="mb-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {photos.map((photo) => (
+                  <div key={photo.id} className="relative group">
+                    <img
+                      src={photo.url}
+                      alt="Pre-commencement photo"
+                      className="w-full aspect-square object-cover rounded-lg border border-gray-200 bg-gray-100"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(photo)}
+                      disabled={photoIdRemoving === photo.id}
+                      className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity disabled:opacity-100"
+                      aria-label="Remove photo"
+                    >
+                      {photoIdRemoving === photo.id ? (
+                        <span className="text-xs">…</span>
+                      ) : (
+                        '×'
+                      )}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            {!photosLoading && photos.length < MAX_PHOTOS && (
+              <>
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handlePhotoSelect}
+                  disabled={isUploading}
+                  className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-gray-300 file:bg-white file:text-gray-700 hover:file:bg-gray-50 focus:ring-2 focus:ring-[#698F00] focus:border-transparent disabled:opacity-50"
+                />
+                <p className="mt-1 text-sm text-gray-500">
+                  {isUploading ? 'Uploading…' : 'Add photos (max 10).'}
+                </p>
+              </>
+            )}
+            {!photosLoading && photos.length >= MAX_PHOTOS && (
+              <p className="text-gray-500 text-sm">Maximum photos reached.</p>
+            )}
+
             <h2 className="text-lg font-semibold text-gray-900 mb-3 mt-8">Stages</h2>
             {stageError && (
               <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
@@ -1128,6 +1175,7 @@ export default function JobDetailPage() {
                   const isPavingTemplate = templateNameLower.includes('paving');
                   const isIrrigationTemplate = templateNameLower.includes('irrigation');
                   const isFencingTemplate = templateNameLower.includes('fencing');
+                  const hasQaTemplate = isPavingTemplate || isIrrigationTemplate || isFencingTemplate;
                   return (
                     <li
                       key={stage.id}
@@ -1254,6 +1302,16 @@ export default function JobDetailPage() {
                           </Link>
                         </div>
                       )}
+                      {!hasQaTemplate && !mismatchWarning && (
+                        <div className="mt-2">
+                          <Link
+                            href={stageSignOffHref(orgSlug, jobId, stage.id, qaRuns)}
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
+                          >
+                            Supervisor sign-off
+                          </Link>
+                        </div>
+                      )}
                       {stage.checklist_templates?.checklist_template_items &&
                         stage.checklist_templates.checklist_template_items.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
@@ -1295,63 +1353,6 @@ export default function JobDetailPage() {
                   );
                 })}
               </ul>
-            )}
-
-            <h2 className="text-lg font-semibold text-gray-900 mb-3 mt-8">
-              Pre-commencement photos ({photos.length}/{MAX_PHOTOS})
-            </h2>
-            {photosLoading && (
-              <p className="text-gray-600">Loading photos…</p>
-            )}
-            {!photosLoading && photosError && (
-              <div className="mb-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                {photosError}
-              </div>
-            )}
-            {!photosLoading && photos.length > 0 && (
-              <div className="mb-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {photos.map((photo) => (
-                  <div key={photo.id} className="relative group">
-                    <img
-                      src={photo.url}
-                      alt="Pre-commencement photo"
-                      className="w-full aspect-square object-cover rounded-lg border border-gray-200 bg-gray-100"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRemovePhoto(photo)}
-                      disabled={photoIdRemoving === photo.id}
-                      className="absolute top-2 right-2 bg-red-600 text-white rounded-full w-8 h-8 flex items-center justify-center opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity disabled:opacity-100"
-                      aria-label="Remove photo"
-                    >
-                      {photoIdRemoving === photo.id ? (
-                        <span className="text-xs">…</span>
-                      ) : (
-                        '×'
-                      )}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-            {!photosLoading && photos.length < MAX_PHOTOS && (
-              <>
-                <input
-                  ref={photoInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handlePhotoSelect}
-                  disabled={isUploading}
-                  className="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border file:border-gray-300 file:bg-white file:text-gray-700 hover:file:bg-gray-50 focus:ring-2 focus:ring-[#698F00] focus:border-transparent disabled:opacity-50"
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                  {isUploading ? 'Uploading…' : 'Add photos (max 10).'}
-                </p>
-              </>
-            )}
-            {!photosLoading && photos.length >= MAX_PHOTOS && (
-              <p className="text-gray-500 text-sm">Maximum photos reached.</p>
             )}
 
             <JobActivityFeed

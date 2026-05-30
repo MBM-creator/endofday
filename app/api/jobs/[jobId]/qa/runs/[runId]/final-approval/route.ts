@@ -8,6 +8,7 @@ import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
 import { computeV2SectionUiStates } from '@/lib/paving-qa-v2-graph';
 import { getIrrigationFinalApprovalBlockers } from '@/lib/irrigation-qa-v1-graph';
 import { getFencingFinalApprovalBlockers } from '@/lib/fencing-qa-v1-graph';
+import { getSignoffFinalApprovalBlockers } from '@/lib/signoff-qa-v1-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -116,6 +117,32 @@ export async function POST(
         {
           ok: false,
           message: 'Fencing QA cannot be final-approved until all applicable sections and required evidence are cleared.',
+          incompleteSections: blockers.map((s) => ({
+            code: s.code,
+            title: s.title,
+            status: s.status,
+            reasons: s.reasons,
+          })),
+        },
+        { status: 409 }
+      );
+      res.headers.set('x-request-id', requestId);
+      return res;
+    }
+  }
+
+  if (typedBundle.qaType === 'sign_off') {
+    const blockers = getSignoffFinalApprovalBlockers(
+      typedBundle.setup,
+      typedBundle.submissions,
+      typedBundle.photoRows,
+      typedBundle.issues
+    );
+    if (blockers.length > 0) {
+      const res = NextResponse.json(
+        {
+          ok: false,
+          message: 'Supervisor sign-off cannot be final-approved until required evidence is cleared.',
           incompleteSections: blockers.map((s) => ({
             code: s.code,
             title: s.title,

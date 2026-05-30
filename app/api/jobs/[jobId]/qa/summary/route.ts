@@ -7,6 +7,7 @@ import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
 import { v2RunHasIncompleteEvidence } from '@/lib/paving-qa-v2-graph';
 import { irrigationRunHasIncompleteEvidence } from '@/lib/irrigation-qa-v1-graph';
 import { fencingRunHasIncompleteEvidence } from '@/lib/fencing-qa-v1-graph';
+import { signoffRunHasIncompleteEvidence } from '@/lib/signoff-qa-v1-graph';
 import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
@@ -80,9 +81,13 @@ export async function GET(
         ? irrigationRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
         : bundle.qaType === 'fencing'
           ? fencingRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
-          : bundle.version === 1
+          : bundle.qaType === 'sign_off'
+            ? signoffRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
+          : bundle.qaType === 'paving' && bundle.version === 1
             ? activeRunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
-            : v2RunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues);
+            : bundle.qaType === 'paving' && bundle.version === 2
+              ? v2RunHasIncompleteEvidence(bundle.setup, bundle.submissions, bundle.photoRows, bundle.issues)
+              : true;
 
     incompleteByType[bundle.qaType] = incomplete;
     activeRuns.push({

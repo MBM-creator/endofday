@@ -1,7 +1,10 @@
 import type { CcProjectVariation } from '@/lib/cc-client';
+import { clientConnectVariationsUrl } from '@/lib/cc-client-display';
 
 type ClientConnectVariationsSummaryProps = {
   variations: CcProjectVariation[];
+  quoteId?: string | null;
+  portalBaseUrl?: string | null;
   className?: string;
 };
 
@@ -21,8 +24,16 @@ function variationLabel(variation: CcProjectVariation): string {
 
 export function ClientConnectVariationsSummary({
   variations,
+  quoteId = null,
+  portalBaseUrl = null,
   className = '',
 }: ClientConnectVariationsSummaryProps) {
+  const variationsUrl = clientConnectVariationsUrl(
+    portalBaseUrl,
+    quoteId,
+    variations.find((variation) => variation.href)?.href ?? null
+  );
+
   return (
     <section className={className}>
       <h2 className="text-lg font-semibold text-gray-900 mb-2">Variations</h2>
@@ -51,6 +62,18 @@ export function ClientConnectVariationsSummary({
             );
           })}
         </ul>
+      )}
+      {variationsUrl && (
+        <p className="mt-3">
+          <a
+            href={variationsUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-sm font-medium text-[#698F00] hover:underline"
+          >
+            Open variations in Client Connect →
+          </a>
+        </p>
       )}
     </section>
   );

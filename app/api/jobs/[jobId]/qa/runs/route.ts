@@ -5,6 +5,7 @@ import { guardStaffApi } from '@/lib/guard-staff-api';
 import { validateSetupV2 } from '@/lib/paving-qa-v2-setup';
 import { validateIrrigationSetupV1 } from '@/lib/irrigation-qa-v1-setup';
 import { validateFencingSetupV1 } from '@/lib/fencing-qa-v1-setup';
+import { validateSignoffSetupV1 } from '@/lib/signoff-qa-v1-setup';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -94,12 +95,17 @@ export async function POST(
     return jsonError('Invalid JSON body', 400, requestId);
   }
 
-  const qaType = body.qaType === 'irrigation' || body.qaType === 'fencing' ? body.qaType : 'paving';
+  const qaType =
+    body.qaType === 'irrigation' || body.qaType === 'fencing' || body.qaType === 'sign_off'
+      ? body.qaType
+      : 'paving';
   const setupParsed = qaType === 'irrigation'
     ? validateIrrigationSetupV1(body.setup ?? {})
     : qaType === 'fencing'
       ? validateFencingSetupV1(body.setup ?? {})
-      : validateSetupV2(body.setup ?? {});
+      : qaType === 'sign_off'
+        ? validateSignoffSetupV1(body.setup ?? {})
+        : validateSetupV2(body.setup ?? {});
   if (!setupParsed.ok) {
     const first = setupParsed.errors[0];
     return jsonError(first?.message ?? 'Invalid setup', 400, requestId);
