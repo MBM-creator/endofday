@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
+import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
-import { compressImageForUpload } from '@/lib/client-image-compression';
+import { ccClientDisplayName } from '@/lib/cc-client-display';
 
 interface Job {
   id: string;
@@ -16,6 +17,9 @@ interface Job {
   created_at: string;
   active_stage_id?: string | null;
   cc_project_id?: string | null;
+  cc_quote_id?: string | null;
+  cc_job_id?: string | null;
+  cc_job_number?: string | null;
   cc_client_id?: string | null;
   cc_project_title_snapshot?: string | null;
   cc_client_name_snapshot?: string | null;
@@ -63,15 +67,67 @@ interface JobBrief {
 
 interface QaRun {
   id: string;
-  stage_id: string | null;
   status: string;
-  qa_type?: 'paving' | 'irrigation' | 'fencing' | string | null;
+  qa_type?: string | null;
+  setup_version: number | null;
+  started_at: string;
+  completed_at?: string | null;
+  supervisor_final_approved_at?: string | null;
 }
 
 const MAX_PHOTOS = 10;
 
 function normaliseMatchText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function projectIdentity(project: CcProject): string {
+  if (project.cc_job_id) return `cc_job_id:${project.cc_job_id}`;
+  if (project.cc_job_number) return `cc_job_number:${project.cc_job_number}`;
+  if (project.quote_id) return `cc_quote_id:${project.quote_id}`;
+  return `cc_project_id:${project.project_id}`;
+}
+
+function jobIdentityWithProjects(job: Job, projects: CcProject[]): string | null {
+  if (job.cc_job_id) return `cc_job_id:${job.cc_job_id}`;
+  if (job.cc_job_number) return `cc_job_number:${job.cc_job_number}`;
+  if (job.cc_quote_id) return `cc_quote_id:${job.cc_quote_id}`;
+  const project = job.cc_project_id
+    ? projects.find((candidate) => candidate.project_id === job.cc_project_id) ?? null
+    : null;
+  if (project) return projectIdentity(project);
+  if (job.cc_project_id) return `cc_project_id:${job.cc_project_id}`;
+  return null;
+}
+
+/**
+ * Detect a mismatch between stage name / CC trade and the selected QA template.
+ * Returns a human-readable warning string, or null when no mismatch is detected.
+ */
+function getTemplateMismatchWarning(stage: Stage): string | null {
+  const templateName = (stage.checklist_templates?.name ?? '').toLowerCase();
+  if (!templateName) return null;
+
+  const stageName = stage.name.toLowerCase();
+  const ccTrade = (stage.cc_section_trade ?? '').toLowerCase().replace(/_/g, ' ');
+
+  const isPavingContext = stageName.includes('paving') || ccTrade.includes('paving');
+  const isIrrigationContext = stageName.includes('irrigation') || ccTrade.includes('irrigation');
+  const isFencingContext = stageName.includes('fence') || stageName.includes('fencing') || ccTrade.includes('fencing');
+  const isPavingTemplate = templateName.includes('paving');
+  const isIrrigationTemplate = templateName.includes('irrigation');
+  const isFencingTemplate = templateName.includes('fencing');
+
+  if ((isIrrigationContext || isFencingContext) && isPavingTemplate) {
+    return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Paving QA template.`;
+  }
+  if ((isPavingContext || isFencingContext) && isIrrigationTemplate) {
+    return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Irrigation QA template.`;
+  }
+  if ((isPavingContext || isIrrigationContext) && isFencingTemplate) {
+    return `Stage/template mismatch: this stage is labelled "${stage.name}" but is using the Fencing QA template.`;
+  }
+  return null;
 }
 
 function findSuggestedCcProject(job: Job, projects: CcProject[]): CcProject | null {
@@ -86,31 +142,33 @@ function findSuggestedCcProject(job: Job, projects: CcProject[]): CcProject | nu
   );
 }
 
-function supportedQaTypeForStage(stage: Stage): 'paving' | 'irrigation' | 'fencing' | null {
-  const trade = stage.cc_section_trade;
-  if (trade === 'paving' || trade === 'irrigation' || trade === 'fencing') return trade;
-
-  const templateName = normaliseMatchText(stage.checklist_templates?.name ?? '');
-  const stageName = normaliseMatchText(stage.name);
-  if (templateName.includes('paving') || stageName.includes('paving')) return 'paving';
-  if (templateName.includes('irrigation') || stageName.includes('irrigation')) return 'irrigation';
-  if (templateName.includes('fencing') || stageName.includes('fencing')) return 'fencing';
-  return null;
+function qaRunType(run: QaRun): 'paving' | 'irrigation' | 'fencing' {
+  if (run.qa_type === 'irrigation') return 'irrigation';
+  if (run.qa_type === 'fencing') return 'fencing';
+  return 'paving';
 }
 
-function qaTypeLabel(type: 'paving' | 'irrigation' | 'fencing'): string {
-  if (type === 'paving') return 'Paving';
-  if (type === 'irrigation') return 'Irrigation';
-  return 'Fencing';
+function stageQaHref(
+  orgSlug: string,
+  jobId: string,
+  stageId: string,
+  type: 'paving' | 'irrigation' | 'fencing',
+  qaRuns: QaRun[]
+): string {
+  const activeRun = qaRuns.find((run) => run.status === 'active' && qaRunType(run) === type);
+  if (activeRun) {
+    return `/t/${orgSlug}/jobs/${jobId}/qa/${type}/${activeRun.id}`;
+  }
+  return `/t/${orgSlug}/jobs/${jobId}/qa/${type}/new?stageId=${encodeURIComponent(stageId)}`;
 }
 
 export default function JobDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const orgSlug = (params?.orgSlug as string) ?? '';
   const jobId = (params?.jobId as string) ?? '';
 
   const [job, setJob] = useState<Job | null>(null);
+  const [allJobs, setAllJobs] = useState<Job[]>([]);
   const [stages, setStages] = useState<Stage[]>([]);
   const [photos, setPhotos] = useState<PreCommencementPhoto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,17 +188,15 @@ export default function JobDetailPage() {
   const [isSubmittingStage, setIsSubmittingStage] = useState(false);
   const [stageError, setStageError] = useState<string | null>(null);
   const [stageIdSettingActive, setStageIdSettingActive] = useState<string | null>(null);
+  const [stageIdMoving, setStageIdMoving] = useState<string | null>(null);
   const [activeStageError, setActiveStageError] = useState<string | null>(null);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [templatesError, setTemplatesError] = useState<string | null>(null);
   const [stageIdUpdatingTemplate, setStageIdUpdatingTemplate] = useState<string | null>(null);
   const [templateUpdateError, setTemplateUpdateError] = useState<string | null>(null);
-  const [activeStageStatus, setActiveStageStatus] = useState<{
-    completions: Record<string, string>;
-    dailyNote: string | null;
-    endOfDaySubmitted: boolean;
-  } | null>(null);
+  const [qaRuns, setQaRuns] = useState<QaRun[]>([]);
+  const [qaRunsError, setQaRunsError] = useState<string | null>(null);
 
   const [ccProjects, setCcProjects] = useState<CcProject[]>([]);
   const [ccProjectsLoading, setCcProjectsLoading] = useState(false);
@@ -150,12 +206,6 @@ export default function JobDetailPage() {
   const [ccMappingError, setCcMappingError] = useState<string | null>(null);
   const [manualCcProjectTitle, setManualCcProjectTitle] = useState('');
   const [manualCcClientName, setManualCcClientName] = useState('');
-  const [showHideConfirm, setShowHideConfirm] = useState(false);
-  const [hideConfirmText, setHideConfirmText] = useState('');
-  const [hideJobSaving, setHideJobSaving] = useState(false);
-  const [hideJobError, setHideJobError] = useState<string | null>(null);
-  const [qaRuns, setQaRuns] = useState<QaRun[]>([]);
-  const [qaRunsError, setQaRunsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -170,7 +220,7 @@ export default function JobDetailPage() {
     setJob(null);
     setStages([]);
 
-    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}&jobId=${encodeURIComponent(jobId)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
       .then(({ res, data }) => {
         if (cancelled) return;
@@ -182,7 +232,7 @@ export default function JobDetailPage() {
           setError('Invalid response');
           return;
         }
-        const found = data.jobs.find((j: Job) => j.id === jobId);
+        const found = data.jobs[0];
         if (!found) {
           setError('Job not found');
           return;
@@ -191,7 +241,7 @@ export default function JobDetailPage() {
         setManualCcProjectTitle(found.cc_project_title_snapshot ?? '');
         setManualCcClientName(found.cc_client_name_snapshot ?? '');
 
-        return fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`);
+        return fetch(`/api/stages?jobId=${encodeURIComponent(found.id)}`);
       })
       .then((stagesRes) => {
         if (cancelled || stagesRes === undefined) return undefined;
@@ -223,36 +273,30 @@ export default function JobDetailPage() {
   }, [orgSlug, jobId]);
 
   useEffect(() => {
-    if (!orgSlug || !jobId) return;
-
+    if (!orgSlug) return;
     let cancelled = false;
-    setQaRunsError(null);
-    fetch(`/api/jobs/${jobId}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`)
-      .then((res) => res.json().then((data) => ({ res, data })))
-      .then(({ res, data }) => {
-        if (cancelled) return;
-        if (!res.ok) {
-          setQaRunsError(typeof data?.message === 'string' ? data.message : 'Failed to load QA runs');
-          return;
+    fetch(`/api/jobs?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json())
+      .then((data: { ok?: boolean; jobs?: Job[] }) => {
+        if (!cancelled && data?.ok && Array.isArray(data.jobs)) {
+          setAllJobs(data.jobs);
         }
-        setQaRuns(Array.isArray(data.runs) ? data.runs : []);
       })
-      .catch((err) => {
-        if (!cancelled) setQaRunsError(err instanceof Error ? err.message : 'Failed to load QA runs');
+      .catch(() => {
+        if (!cancelled) setAllJobs([]);
       });
-
     return () => {
       cancelled = true;
     };
-  }, [orgSlug, jobId]);
+  }, [orgSlug]);
 
   // Fetch pre-commencement photos when job is available
   useEffect(() => {
-    if (!job || !orgSlug || !jobId) return;
+    if (!job || !orgSlug) return;
     let cancelled = false;
     setPhotosLoading(true);
     setPhotosError(null);
-    fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs/${job.id}/photos?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json())
       .then((data: { ok?: boolean; photos?: PreCommencementPhoto[]; message?: string }) => {
         if (cancelled) return;
@@ -273,11 +317,11 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [job, jobId, orgSlug]);
+  }, [job, orgSlug]);
 
   // Fetch Client Connect projects when job is available
   useEffect(() => {
-    if (!job || !orgSlug || !jobId) return;
+    if (!job || !orgSlug) return;
     let cancelled = false;
     setCcProjectsLoading(true);
     setCcProjectsError(null);
@@ -311,15 +355,15 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [job, jobId, orgSlug]);
+  }, [job, orgSlug]);
 
   // Fetch job brief when job is available
   useEffect(() => {
-    if (!job || !orgSlug || !jobId) return;
+    if (!job || !orgSlug) return;
     let cancelled = false;
     setBriefLoading(true);
     setBriefError(null);
-    fetch(`/api/jobs/${jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`)
+    fetch(`/api/jobs/${job.id}/brief?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json())
       .then((data: { ok?: boolean; brief?: JobBrief | null; message?: string }) => {
         if (cancelled) return;
@@ -340,7 +384,7 @@ export default function JobDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [job, jobId, orgSlug]);
+  }, [job, orgSlug]);
 
   // Fetch checklist templates for org (for stage template selector)
   useEffect(() => {
@@ -376,37 +420,39 @@ export default function JobDetailPage() {
   }, [orgSlug, job]);
 
   useEffect(() => {
-    if (!job?.active_stage_id || !orgSlug || !jobId) {
-      setActiveStageStatus(null);
+    if (!job?.id || !orgSlug) {
+      setQaRuns([]);
+      setQaRunsError(null);
       return;
     }
     let cancelled = false;
-    fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
+    setQaRunsError(null);
+    fetch(`/api/jobs/${job.id}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`)
       .then((res) => res.json().then((data) => ({ res, data })))
-      .then(({ res, data }: { res: Response; data: { ok?: boolean; activeStage?: { daily_note?: string | null }; completions?: Record<string, string>; endOfDay?: { submitted?: boolean }; message?: string } }) => {
+      .then(({ res, data }: { res: Response; data: { ok?: boolean; runs?: QaRun[]; message?: string } }) => {
         if (cancelled) return;
-        if (!res.ok || !data?.ok) {
-          setActiveStageStatus(null);
+        if (!res.ok || !data?.ok || !Array.isArray(data.runs)) {
+          setQaRuns([]);
+          setQaRunsError(typeof data?.message === 'string' ? data.message : 'QA status unavailable');
           return;
         }
-        setActiveStageStatus({
-          completions: typeof data.completions === 'object' && data.completions != null ? data.completions : {},
-          dailyNote: data.activeStage?.daily_note ?? null,
-          endOfDaySubmitted: data.endOfDay?.submitted === true,
-        });
+        setQaRuns(data.runs);
       })
       .catch(() => {
-        if (!cancelled) setActiveStageStatus(null);
+        if (!cancelled) {
+          setQaRuns([]);
+          setQaRunsError('QA status unavailable');
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [job?.active_stage_id, jobId, orgSlug]);
+  }, [job?.id, orgSlug]);
 
   async function refetchPhotos() {
-    if (!orgSlug || !jobId) return;
+    if (!orgSlug || !job?.id) return;
     try {
-      const res = await fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`);
+      const res = await fetch(`/api/jobs/${job.id}/photos?orgSlug=${encodeURIComponent(orgSlug)}`);
       const data = await res.json();
       if (res.ok && data?.ok && Array.isArray(data.photos)) {
         setPhotos(data.photos);
@@ -418,9 +464,9 @@ export default function JobDetailPage() {
   }
 
   async function refetchStages() {
-    if (!jobId) return;
+    if (!job?.id) return;
     try {
-      const res = await fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`);
+      const res = await fetch(`/api/stages?jobId=${encodeURIComponent(job.id)}`);
       const data = await res.json();
       if (res.ok && data?.ok && Array.isArray(data.stages)) {
         setStages(data.stages);
@@ -435,7 +481,7 @@ export default function JobDetailPage() {
     setStageIdSettingActive(stageId);
     try {
       const res = await fetch(
-        `/api/jobs/${jobId}?orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/jobs/${job?.id ?? jobId}?orgSlug=${encodeURIComponent(orgSlug)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -479,6 +525,47 @@ export default function JobDetailPage() {
       setTemplateUpdateError('Failed to update template');
     } finally {
       setStageIdUpdatingTemplate(null);
+    }
+  }
+
+  async function moveStage(stageId: string, direction: 'up' | 'down') {
+    if (!orgSlug || stageIdMoving) return;
+    const fromIndex = stages.findIndex((stage) => stage.id === stageId);
+    const toIndex = direction === 'up' ? fromIndex - 1 : fromIndex + 1;
+    if (fromIndex < 0 || toIndex < 0 || toIndex >= stages.length) return;
+
+    const nextStages = [...stages];
+    const movingStage = nextStages[fromIndex];
+    const swappedStage = nextStages[toIndex];
+    nextStages[fromIndex] = swappedStage;
+    nextStages[toIndex] = movingStage;
+    const reorderedStages = nextStages.map((stage, index) => ({ ...stage, sort_order: index }));
+
+    setActiveStageError(null);
+    setStageIdMoving(stageId);
+    setStages(reorderedStages);
+
+    try {
+      const updates = [movingStage.id, swappedStage.id].map((id) => {
+        const next = reorderedStages.find((stage) => stage.id === id);
+        return fetch(`/api/stages/${id}?orgSlug=${encodeURIComponent(orgSlug)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sortOrder: next?.sort_order ?? 0 }),
+        });
+      });
+      const responses = await Promise.all(updates);
+      const failed = responses.find((res) => !res.ok);
+      if (failed) {
+        const data = await failed.json().catch(() => null);
+        throw new Error(typeof data?.message === 'string' ? data.message : 'Failed to move stage');
+      }
+      await refetchStages();
+    } catch (err) {
+      setActiveStageError(err instanceof Error ? err.message : 'Failed to move stage');
+      await refetchStages();
+    } finally {
+      setStageIdMoving(null);
     }
   }
 
@@ -534,7 +621,7 @@ export default function JobDetailPage() {
             cc_project_id: selected.project_id,
             cc_client_id: selected.client_id,
             cc_project_title_snapshot: selected.project_title,
-            cc_client_name_snapshot: selected.client_name,
+            cc_client_name_snapshot: ccClientDisplayName(selected),
           }
           : {
             cc_project_id: null,
@@ -549,7 +636,7 @@ export default function JobDetailPage() {
     }
     try {
       const res = await fetch(
-        `/api/jobs/${jobId}/cc-mapping?orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/jobs/${job?.id ?? jobId}/cc-mapping?orgSlug=${encodeURIComponent(orgSlug)}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -598,10 +685,9 @@ export default function JobDetailPage() {
       for (const file of toUpload) {
         if (!(file instanceof File) || file.size === 0) continue;
         const formData = new FormData();
+        formData.append('file', file);
         try {
-          const uploadFile = await compressImageForUpload(file);
-          formData.append('file', uploadFile);
-          const res = await fetch(`/api/jobs/${jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`, {
+          const res = await fetch(`/api/jobs/${job?.id ?? jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`, {
             method: 'POST',
             body: formData,
           });
@@ -627,7 +713,7 @@ export default function JobDetailPage() {
     setPhotoIdRemoving(photo.id);
     try {
       const res = await fetch(
-        `/api/jobs/${jobId}/photos?photoId=${encodeURIComponent(photo.id)}&orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/jobs/${job?.id ?? jobId}/photos?photoId=${encodeURIComponent(photo.id)}&orgSlug=${encodeURIComponent(orgSlug)}`,
         { method: 'DELETE' }
       );
       const data = await res.json();
@@ -640,30 +726,6 @@ export default function JobDetailPage() {
       setPhotosError('Failed to remove photo');
     } finally {
       setPhotoIdRemoving(null);
-    }
-  }
-
-  async function hideJobFromQaList() {
-    if (!job || hideConfirmText !== 'DELETE') return;
-
-    setHideJobSaving(true);
-    setHideJobError(null);
-    try {
-      const res = await fetch(`/api/jobs/${job.id}?orgSlug=${encodeURIComponent(orgSlug)}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ hideFromQaList: true, confirmation: hideConfirmText }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data?.ok) {
-        setHideJobError(typeof data?.message === 'string' ? data.message : 'Failed to hide job from QA list');
-        return;
-      }
-      router.push(`/t/${orgSlug}/jobs`);
-    } catch (err) {
-      setHideJobError(err instanceof Error ? err.message : 'Failed to hide job from QA list');
-    } finally {
-      setHideJobSaving(false);
     }
   }
 
@@ -681,7 +743,7 @@ export default function JobDetailPage() {
     setBriefError(null);
     setIsSavingBrief(true);
     try {
-      const res = await fetch(`/api/jobs/${jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`, {
+      const res = await fetch(`/api/jobs/${job?.id ?? jobId}/brief?orgSlug=${encodeURIComponent(orgSlug)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: editContent }),
@@ -710,13 +772,41 @@ export default function JobDetailPage() {
   }
 
   const selectedCcProjectId = ccSelectedProjectId || job?.cc_project_id || '';
+  const linkedIdentitiesForOtherJobs = new Set(
+    allJobs
+      .filter((candidate) => candidate.id !== job?.id)
+      .map((candidate) => jobIdentityWithProjects(candidate, ccProjects))
+      .filter((identity): identity is string => Boolean(identity))
+  );
+  const selectableCcProjects = ccProjects.filter((project) => {
+    if (project.project_id === job?.cc_project_id) return true;
+    return !linkedIdentitiesForOtherJobs.has(projectIdentity(project));
+  });
   const selectedCcProject = selectedCcProjectId
-    ? ccProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
+    ? selectableCcProjects.find((project) => project.project_id === selectedCcProjectId) ?? null
     : null;
   const connectedProjectTitle =
     selectedCcProject?.project_title ?? job?.cc_project_title_snapshot ?? '';
   const connectedClientName =
-    selectedCcProject?.client_name ?? job?.cc_client_name_snapshot ?? '';
+    selectedCcProject ? ccClientDisplayName(selectedCcProject) : job?.cc_client_name_snapshot ?? '';
+  const currentQaRuns = qaRuns.filter((run) => run.qa_type === 'irrigation' || run.qa_type === 'fencing' || run.setup_version === 2);
+  const activeQaRun = currentQaRuns.find((run) => run.status === 'active') ?? null;
+  const approvedQaRun =
+    currentQaRuns.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
+  const qaStatusLabel = qaRunsError
+    ? 'QA status unavailable'
+    : activeQaRun
+      ? 'QA in progress'
+      : approvedQaRun
+        ? 'QA complete'
+        : 'No active QA run';
+  const qaStatusClass = qaRunsError
+    ? 'text-amber-800'
+    : activeQaRun
+      ? 'text-amber-800'
+      : approvedQaRun
+        ? 'text-[#698F00]'
+        : 'text-gray-600';
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
@@ -794,16 +884,16 @@ export default function JobDetailPage() {
                     onChange={(e) => {
                       const nextProjectId = e.target.value;
                       setCcSelectedProjectId(nextProjectId);
-                      const nextProject = ccProjects.find((project) => project.project_id === nextProjectId);
+                      const nextProject = selectableCcProjects.find((project) => project.project_id === nextProjectId);
                       setManualCcProjectTitle(nextProject?.project_title ?? '');
-                      setManualCcClientName(nextProject?.client_name ?? '');
+                      setManualCcClientName(nextProject ? ccClientDisplayName(nextProject) : '');
                     }}
                     disabled={ccProjectsLoading || ccMappingSaving || !!ccProjectsError}
                   >
                     <option value="">Not linked</option>
-                    {ccProjects.map((project) => (
+                    {selectableCcProjects.map((project) => (
                       <option key={project.project_id} value={project.project_id}>
-                        {project.project_title} — {project.client_name}
+                        {project.project_title} — {ccClientDisplayName(project)}
                         {project.site_address ? ` — ${project.site_address}` : ''} ({project.status})
                       </option>
                     ))}
@@ -910,23 +1000,14 @@ export default function JobDetailPage() {
               )}
             </section>
 
-            {job.active_stage_id && activeStageStatus && (() => {
-              const activeStage = stages.find((s) => s.id === job.active_stage_id);
-              const checklistItems = activeStage?.checklist_templates?.checklist_template_items ?? [];
-              const checklistTotal = checklistItems.length;
-              const checklistCompleted = checklistItems.filter((item) => activeStageStatus.completions[item.id]).length;
-              const hasSavedNote = (activeStageStatus.dailyNote ?? '').trim() !== '';
-              const eodSubmitted = activeStageStatus.endOfDaySubmitted;
-              return (
-                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 mb-4 bg-white/80 border border-gray-200 rounded-lg text-sm text-gray-600">
-                  <span>
-                    Checklist {checklistCompleted} / {checklistTotal}
-                  </span>
-                  <span>{hasSavedNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
-                  <span>{eodSubmitted ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
-                </div>
-              );
-            })()}
+            {job.active_stage_id && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 mb-4 bg-white/80 border border-gray-200 rounded-lg text-sm text-gray-600">
+                <span className={qaStatusClass}>{qaStatusLabel}</span>
+                <Link href={`/t/${orgSlug}/jobs/${jobId}/today`} className="font-medium text-[#698F00] hover:underline">
+                  Open today&apos;s QA
+                </Link>
+              </div>
+            )}
 
             <h2 className="text-lg font-semibold text-gray-900 mb-3">Job brief</h2>
             {briefLoading && (
@@ -1030,24 +1111,17 @@ export default function JobDetailPage() {
               <p className="text-gray-600">No stages yet.</p>
             ) : (
               <ul className="space-y-3">
-                {stages.map((stage) => {
+                {stages.map((stage, stageIndex) => {
                   const isActive = job?.active_stage_id === stage.id;
                   const isSetting = stageIdSettingActive === stage.id;
+                  const isMoving = stageIdMoving === stage.id;
                   const isUpdatingTemplate = stageIdUpdatingTemplate === stage.id;
                   const selectorDisabled = templatesLoading || !!templatesError || isUpdatingTemplate;
-                  const supportedQaType = supportedQaTypeForStage(stage);
-                  const activeQaRun = supportedQaType
-                    ? qaRuns.find((run) => {
-                        const runQaType = run.qa_type ?? 'paving';
-                        return run.status === 'active' && runQaType === supportedQaType && (run.stage_id === stage.id || run.stage_id == null);
-                      }) ?? null
-                    : null;
-                  const qaLabel = supportedQaType ? qaTypeLabel(supportedQaType) : null;
-                  const qaHref = supportedQaType
-                    ? activeQaRun
-                      ? `/t/${orgSlug}/jobs/${jobId}/qa/${supportedQaType}/${activeQaRun.id}`
-                      : `/t/${orgSlug}/jobs/${jobId}/qa/${supportedQaType}/new?stageId=${encodeURIComponent(stage.id)}`
-                    : '';
+                  const mismatchWarning = getTemplateMismatchWarning(stage);
+                  const templateNameLower = (stage.checklist_templates?.name ?? '').toLowerCase();
+                  const isPavingTemplate = templateNameLower.includes('paving');
+                  const isIrrigationTemplate = templateNameLower.includes('irrigation');
+                  const isFencingTemplate = templateNameLower.includes('fencing');
                   return (
                     <li
                       key={stage.id}
@@ -1057,71 +1131,121 @@ export default function JobDetailPage() {
                           : 'bg-white border-gray-200'
                       }`}
                     >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-medium text-gray-900">{stage.name}</span>
-                        {stage.created_at && (
-                          <span className="text-sm text-gray-500">
-                            {formatDate(stage.created_at)}
-                          </span>
-                        )}
-                        {isActive && (
-                          <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
-                            Active
-                          </span>
-                        )}
-                        {stage.cc_section_id && (
-                          <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
-                            Client Connect section
-                            {stage.cc_section_trade ? ` · ${stage.cc_section_trade.replace('_', ' ')}` : ''}
-                          </span>
-                        )}
-                        {!isActive && (
-                          <button
-                            type="button"
-                            onClick={() => setActiveStage(stage.id)}
-                            disabled={!!stageIdSettingActive}
-                            className="text-sm text-[#698F00] hover:underline font-medium disabled:opacity-50"
-                          >
-                            {isSetting ? 'Setting…' : 'Set as active'}
-                          </button>
-                        )}
-                      </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <span className="text-sm text-gray-600">Template:</span>
-                        <select
-                          value={stage.checklist_template_id ?? ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setStageTemplate(stage.id, val ? val : null);
-                          }}
-                          disabled={selectorDisabled}
-                          className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent bg-white text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 max-w-full"
-                          aria-label={`Template for ${stage.name}`}
-                        >
-                          <option value="">None</option>
-                          {templates.map((t) => (
-                            <option key={t.id} value={t.id}>
-                              {t.name}
-                            </option>
-                          ))}
-                        </select>
-                        {isUpdatingTemplate && (
-                          <span className="text-xs text-gray-500">Saving…</span>
-                        )}
-                      </div>
-                      {supportedQaType && qaLabel && (
-                        <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <Link
-                            href={qaHref}
-                            className="inline-flex items-center rounded-lg bg-[#698F00] px-3 py-2 text-sm font-medium text-white hover:bg-[#5a7d00]"
-                          >
-                            {activeQaRun ? `Open active ${qaLabel} QA` : `Start ${qaLabel} QA`}
-                          </Link>
-                          {qaRunsError && (
-                            <span className="text-xs text-amber-700">
-                              QA run status unavailable; starting may show an active-run warning.
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-medium text-gray-900">{stage.name}</span>
+                          {stage.created_at && (
+                            <span className="text-sm text-gray-500">
+                              {formatDate(stage.created_at)}
                             </span>
                           )}
+                          {isActive && (
+                            <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
+                              Active
+                            </span>
+                          )}
+                          {stage.cc_section_id && (
+                            <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                              Client Connect section
+                              {stage.cc_section_trade ? ` · ${stage.cc_section_trade.replace('_', ' ')}` : ''}
+                            </span>
+                          )}
+                          {!isActive && (
+                            <button
+                              type="button"
+                              onClick={() => setActiveStage(stage.id)}
+                              disabled={!!stageIdSettingActive}
+                              className="text-sm text-[#698F00] hover:underline font-medium disabled:opacity-50"
+                            >
+                              {isSetting ? 'Setting…' : 'Set as active'}
+                            </button>
+                          )}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => moveStage(stage.id, 'up')}
+                            disabled={stageIndex === 0 || !!stageIdMoving}
+                            className="px-2 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label={`Move ${stage.name} up`}
+                          >
+                            Up
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => moveStage(stage.id, 'down')}
+                            disabled={stageIndex === stages.length - 1 || !!stageIdMoving}
+                            className="px-2 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                            aria-label={`Move ${stage.name} down`}
+                          >
+                            Down
+                          </button>
+                          {isMoving && <span className="text-xs text-gray-500">Moving…</span>}
+                        </div>
+                      </div>
+                      <div className="mt-3 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm text-gray-600">QA template:</span>
+                          <select
+                            value={stage.checklist_template_id ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setStageTemplate(stage.id, val ? val : null);
+                            }}
+                            disabled={selectorDisabled}
+                            className="text-sm px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent bg-white text-gray-900 disabled:opacity-60 disabled:cursor-not-allowed min-w-0 max-w-full"
+                            aria-label={`QA template for ${stage.name}`}
+                          >
+                            <option value="">None</option>
+                            {templates.map((t) => (
+                              <option key={t.id} value={t.id}>
+                                {t.name}
+                              </option>
+                            ))}
+                          </select>
+                          {isUpdatingTemplate && (
+                            <span className="text-xs text-gray-500">Saving…</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Choose the QA checklist template for this stage. This does not rename the stage.
+                        </p>
+                      </div>
+
+                      {mismatchWarning && (
+                        <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                          {mismatchWarning}
+                        </div>
+                      )}
+
+                      {isPavingTemplate && !mismatchWarning && (
+                        <div className="mt-2">
+                          <Link
+                            href={stageQaHref(orgSlug, jobId, stage.id, 'paving', qaRuns)}
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
+                          >
+                            Open Paving QA
+                          </Link>
+                        </div>
+                      )}
+                      {isIrrigationTemplate && !mismatchWarning && (
+                        <div className="mt-2">
+                          <Link
+                            href={stageQaHref(orgSlug, jobId, stage.id, 'irrigation', qaRuns)}
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
+                          >
+                            Open Irrigation QA
+                          </Link>
+                        </div>
+                      )}
+                      {isFencingTemplate && !mismatchWarning && (
+                        <div className="mt-2">
+                          <Link
+                            href={stageQaHref(orgSlug, jobId, stage.id, 'fencing', qaRuns)}
+                            className="inline-flex items-center justify-center px-4 py-2 rounded-lg bg-[#698F00] text-white text-sm font-medium hover:bg-[#5a7d00] transition-colors"
+                          >
+                            Open Fencing QA
+                          </Link>
                         </div>
                       )}
                       {stage.checklist_templates?.checklist_template_items &&
@@ -1224,65 +1348,12 @@ export default function JobDetailPage() {
               <p className="text-gray-500 text-sm">Maximum photos reached.</p>
             )}
 
-            <section className="mt-12 border-t border-gray-200 pt-6">
-              <h2 className="text-lg font-semibold text-gray-900">Remove from QA list</h2>
-              <p className="mt-2 text-sm text-gray-600">
-                This only hides the job from the QA jobs list. Saved job data, stages, photos and QA records remain stored.
-              </p>
-              {hideJobError && (
-                <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-                  {hideJobError}
-                </div>
-              )}
-              {!showHideConfirm ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowHideConfirm(true);
-                    setHideJobError(null);
-                  }}
-                  className="mt-4 rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-                >
-                  Delete
-                </button>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  <label className="block text-sm font-medium text-gray-700" htmlFor="hide-job-confirm">
-                    Type DELETE to confirm
-                  </label>
-                  <input
-                    id="hide-job-confirm"
-                    type="text"
-                    value={hideConfirmText}
-                    onChange={(e) => setHideConfirmText(e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 focus:border-transparent focus:ring-2 focus:ring-[#698F00]"
-                    disabled={hideJobSaving}
-                  />
-                  <div className="flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={hideJobFromQaList}
-                      disabled={hideConfirmText !== 'DELETE' || hideJobSaving}
-                      className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {hideJobSaving ? 'Deleting…' : 'Delete from QA list'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowHideConfirm(false);
-                        setHideConfirmText('');
-                        setHideJobError(null);
-                      }}
-                      disabled={hideJobSaving}
-                      className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
-            </section>
+            <JobActivityFeed
+              orgSlug={orgSlug}
+              jobId={jobId}
+              stages={stages.map((stage) => ({ id: stage.id, name: stage.name }))}
+              activeStageId={job.active_stage_id ?? null}
+            />
           </>
         )}
       </div>

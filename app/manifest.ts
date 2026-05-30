@@ -7,10 +7,10 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Daily Site Report",
-    short_name: "Daily Site Report",
-    description: "Daily site report submission",
-    start_url: "/",
+    name: "QA Checks",
+    short_name: "QA Checks",
+    description: "Job QA checklist launcher",
+    start_url: "/t/madebymobbs/jobs",
     display: "standalone",
     background_color: "#0F172A",
     theme_color: "#0F172A",

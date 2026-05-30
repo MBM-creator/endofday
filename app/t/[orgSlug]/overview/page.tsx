@@ -2,20 +2,39 @@
 
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 
 interface JobOverviewEntry {
   id: string;
   name: string;
   activeStageName: string | null;
-  checklistCompleted: number;
-  checklistTotal: number;
-  hasDailyNote: boolean;
-  eodSubmittedToday: boolean;
-  activeStageLastUpdatedAt?: string | null;
-  blockerType?: string | null;
-  labourHoursToday?: number | null;
-  quotedLabourHours?: number | null;
-  actualLabourHoursTotal?: number | null;
+  qaRunStatus: 'active' | 'completed' | 'none';
+  qaRunId: string | null;
+  qaRunType: 'paving' | 'irrigation' | 'fencing' | null;
+  qaRunApprovedAt: string | null;
+}
+
+function qaBadge(job: JobOverviewEntry): { label: string; className: string } {
+  if (job.qaRunStatus === 'completed' && job.qaRunApprovedAt) {
+    return { label: 'Approved', className: 'bg-[#698F00]/10 text-[#4f6f00] border-[#698F00]/20' };
+  }
+  if (job.qaRunStatus === 'active') {
+    return { label: 'In progress', className: 'bg-amber-50 text-amber-800 border-amber-200' };
+  }
+  return { label: 'Not started', className: 'bg-gray-100 text-gray-700 border-gray-200' };
+}
+
+function qaHref(orgSlug: string, job: JobOverviewEntry): string {
+  if (job.qaRunType === 'paving' && job.qaRunId) {
+    return `/t/${orgSlug}/jobs/${job.id}/qa/paving/${job.qaRunId}`;
+  }
+  if (job.qaRunType === 'irrigation' && job.qaRunId) {
+    return `/t/${orgSlug}/jobs/${job.id}/qa/irrigation/${job.qaRunId}`;
+  }
+  if (job.qaRunType === 'fencing' && job.qaRunId) {
+    return `/t/${orgSlug}/jobs/${job.id}/qa/fencing/${job.qaRunId}`;
+  }
+  return `/t/${orgSlug}/jobs/${job.id}/qa`;
 }
 
 export default function OverviewPage() {
@@ -92,62 +111,19 @@ export default function OverviewPage() {
                 <p className="mt-1 text-sm text-gray-600">
                   {job.activeStageName ?? 'No active stage'}
                 </p>
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
-                  <span>
-                    Checklist {job.checklistCompleted} / {job.checklistTotal}
-                  </span>
-                  <span>{job.hasDailyNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
-                  <span>{job.eodSubmittedToday ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {(() => {
+                    const badge = qaBadge(job);
+                    return (
+                      <span className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${badge.className}`}>
+                        {badge.label}
+                      </span>
+                    );
+                  })()}
+                  <Link href={qaHref(orgSlug, job)} className="text-sm font-medium text-[#698F00] hover:underline">
+                    {job.qaRunId ? 'Open QA run' : 'Open QA hub'}
+                  </Link>
                 </div>
-                {job.activeStageName != null && job.labourHoursToday != null && (
-                  <p className="mt-2 text-sm text-gray-500">
-                    Labour today: {job.labourHoursToday}h
-                  </p>
-                )}
-                {job.activeStageName != null && (() => {
-                  const actual = job.actualLabourHoursTotal ?? 0;
-                  const quoted = job.quotedLabourHours;
-                  const hasQuoted = typeof quoted === 'number' && quoted > 0;
-                  const ratio = hasQuoted ? actual / quoted : 0;
-                  const colorClass = hasQuoted
-                    ? ratio > 1
-                      ? 'text-red-800'
-                      : ratio >= 0.8
-                        ? 'text-amber-800'
-                        : 'text-gray-600'
-                    : 'text-gray-600';
-                  const text = hasQuoted ? `Labour used: ${actual} / ${quoted}h` : `Labour used: ${actual}h`;
-                  return (
-                    <p className={`mt-2 text-sm ${colorClass}`}>
-                      {text}
-                    </p>
-                  );
-                })()}
-                {job.activeStageName != null && job.blockerType && (
-                  <div className="mt-2 py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
-                    &#9888; Blocked: {job.blockerType}
-                  </div>
-                )}
-                {job.activeStageName != null && (() => {
-                  const w: string[] = [];
-                  if (job.checklistTotal > 0 && job.checklistCompleted < job.checklistTotal) w.push('Checklist incomplete');
-                  if (!job.hasDailyNote) w.push('No daily note');
-                  if (!job.eodSubmittedToday) w.push('Awaiting end-of-day');
-                  return w.length > 0 ? (
-                    <div className="mt-2 py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
-                      {w.join(' · ')}
-                    </div>
-                  ) : null;
-                })()}
-                {job.activeStageLastUpdatedAt && (() => {
-                  const d = new Date(job.activeStageLastUpdatedAt);
-                  if (Number.isNaN(d.getTime())) return null;
-                  return (
-                    <p className="mt-2 text-sm text-gray-500">
-                      Last updated {d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
-                    </p>
-                  );
-                })()}
               </li>
             ))}
           </ul>

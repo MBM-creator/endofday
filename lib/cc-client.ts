@@ -47,6 +47,8 @@ export interface CcProjectSection {
 export interface CcProject {
   project_id: string;
   quote_id: string | null;
+  cc_job_id: string | null;
+  cc_job_number: string | null;
   client_id: string;
   project_title: string;
   client_name: string;
@@ -130,6 +132,18 @@ function optionalNumber(value: unknown, fieldName: string): number | null {
     throw new Error(`Invalid Client Connect response: ${fieldName} must be a number or null`);
   }
   return value;
+}
+
+function optionalIdentifier(value: unknown, fieldName: string): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed === '' ? null : trimmed;
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  throw new Error(`Invalid Client Connect response: ${fieldName} must be string, number, or null`);
 }
 
 function normalizeTrade(value: unknown): CcProjectTrade | null {
@@ -236,6 +250,11 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
     const p = item as Record<string, unknown>;
     const project_id = p.project_id;
     const quote_id = p.quote_id;
+    const cc_job_id = optionalIdentifier(p.cc_job_id ?? p.job_id, 'cc_job_id');
+    const cc_job_number = optionalIdentifier(
+      p.cc_job_number ?? p.job_number ?? p.job_no ?? p.jobNo,
+      'cc_job_number'
+    );
     const client_id = p.client_id;
     const project_title = p.project_title;
     const client_name = p.client_name;
@@ -279,6 +298,8 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
     projects.push({
       project_id,
       quote_id: quote_id ?? null,
+      cc_job_id,
+      cc_job_number,
       client_id,
       project_title,
       client_name,
@@ -294,6 +315,29 @@ function validateCcProjectsResponse(payload: unknown): CcProjectsResponseOk {
   }
 
   return { ok: true, projects };
+}
+
+export function ccProjectJobIdentity(
+  project: Pick<CcProject, 'project_id' | 'quote_id' | 'cc_job_id' | 'cc_job_number'>
+): string {
+  if (project.cc_job_id) return `cc_job_id:${project.cc_job_id}`;
+  if (project.cc_job_number) return `cc_job_number:${project.cc_job_number}`;
+  if (project.quote_id) return `cc_quote_id:${project.quote_id}`;
+  return `cc_project_id:${project.project_id}`;
+}
+
+export function dedupeCcProjectsByJobIdentity(projects: CcProject[]): CcProject[] {
+  const seen = new Set<string>();
+  const deduped: CcProject[] = [];
+
+  for (const project of projects) {
+    const identity = ccProjectJobIdentity(project);
+    if (seen.has(identity)) continue;
+    seen.add(identity);
+    deduped.push(project);
+  }
+
+  return deduped;
 }
 
 export async function fetchCcProjects(requestId?: string): Promise<CcProject[]> {
@@ -347,9 +391,9 @@ export async function fetchCcProjects(requestId?: string): Promise<CcProject[]> 
     }
 
     const validated = validateCcProjectsResponse(json);
-    cachedProjects = validated.projects;
+    cachedProjects = dedupeCcProjectsByJobIdentity(validated.projects);
     cacheTimestampMs = now;
-    return validated.projects;
+    return cachedProjects;
   } catch (err) {
     liveError = err;
     const ageMs = now - cacheTimestampMs;

@@ -171,6 +171,14 @@ function isV2SectionCleared(
   const V2_VALID: string[] = ['pass', 'fail', 'not_required'];
 
   for (const item of def.items) {
+    if (item.photoOnly) {
+      if (item.requirePhoto) {
+        const count = photoCounts.get(photoKey(code, item.key)) ?? 0;
+        if (count < 1) reasons.push(`${item.label}: required photo missing`);
+      }
+      continue;
+    }
+
     const result = (answers[item.key]?.result ?? '') as string;
 
     if (!V2_VALID.includes(result)) {

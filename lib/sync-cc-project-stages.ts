@@ -15,7 +15,14 @@ export async function syncCcProjectStagesForJob(
     return { syncedStageIds: [], activeStageId: null };
   }
 
-  const rows = project.sections.map((section, index) => ({
+  const orderedSections = [...project.sections].sort((a, b) => {
+    const aIsDemo = isDemoSection(a.name, a.trade);
+    const bIsDemo = isDemoSection(b.name, b.trade);
+    if (aIsDemo !== bIsDemo) return aIsDemo ? -1 : 1;
+    return project.sections.indexOf(a) - project.sections.indexOf(b);
+  });
+
+  const rows = orderedSections.map((section, index) => ({
     job_id: jobId,
     name: section.name,
     sort_order: index,
@@ -48,7 +55,7 @@ export async function syncCcProjectStagesForJob(
       )
       .map((stage) => [stage.cc_section_id, stage])
   );
-  const syncedStageIds = project.sections
+  const syncedStageIds = orderedSections
     .map((section) => stagesBySectionId.get(section.id)?.id)
     .filter((id): id is string => typeof id === 'string');
 
@@ -103,4 +110,9 @@ export async function syncCcProjectStagesForJob(
     syncedStageIds,
     activeStageId: shouldSetActiveStage ? firstStageId : job?.active_stage_id ?? null,
   };
+}
+
+function isDemoSection(name: string, trade?: string | null): boolean {
+  const text = `${name} ${trade ?? ''}`.toLowerCase().replace(/[_-]+/g, ' ');
+  return /\b(demo|demolition)\b/.test(text);
 }

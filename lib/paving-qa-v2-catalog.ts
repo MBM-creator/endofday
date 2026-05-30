@@ -51,6 +51,8 @@ export type V2CatalogueItem = {
   noteRequiredWhen?: ('pass' | 'fail' | 'not_required')[];
   /** Placeholder / guidance text shown in the note field. Falls back to a generic message. */
   notePrompt?: string;
+  /** Photo evidence only — crew uploads photos; pass/fail is not shown or required. */
+  photoOnly?: boolean;
 };
 
 export type V2CatalogueSection = {
@@ -79,6 +81,7 @@ function item(
     requireSupervisorOnFail: opts.requireSupervisorOnFail ?? false,
     noteRequiredWhen: opts.noteRequiredWhen,
     notePrompt: opts.notePrompt,
+    photoOnly: opts.photoOnly ?? false,
   };
 }
 
@@ -95,47 +98,42 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
     items: [
       item('existing_condition_photo', 'Photograph existing site condition before work starts', {
         requirePhoto: true,
-        criticalOnFail: true,
+        photoOnly: true,
       }),
       item('property_protection', 'Client property protection installed before works begin', {
         requirePhoto: true,
-        criticalOnFail: true,
+        photoOnly: true,
       }),
       item('access_route_protected', 'Access route suitable and protected for materials, machinery or barrows', {
         requirePhoto: true,
-        criticalOnFail: true,
+        photoOnly: true,
       }),
       item('services_identified', 'Existing irrigation, lighting, drains and services identified and protected where visible or known', {
         requirePhoto: true,
-        criticalOnFail: true,
+        photoOnly: true,
       }),
     ],
   },
   {
     code: 'excavation_preparation',
     title: 'Excavation & Sub-Base Preparation',
-    description: 'Excavation depth confirmed for build-up and finished height, subgrade suitable, services protected, and finished height checked against all critical adjacent elements.',
+    description: 'Photograph excavation depth, subgrade condition, crushed rock compaction, and service protection before base preparation continues.',
     items: [
       item('excavation_depth', 'Excavation depth suits finished height and has been checked against doors, steps, drains, other pavers, etc.', {
         requirePhoto: true,
-        criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail'],
-        notePrompt: 'Record intended build-up depth and any critical height constraints.',
+        photoOnly: true,
       }),
       item('soft_spots_removed', 'Soft spots, roots, organic material and loose material removed', {
         requirePhoto: true,
-        criticalOnFail: true,
+        photoOnly: true,
       }),
       item('crushed_rock_compacted', 'Crushed rock is min 50mm and has been compacted', {
         requirePhoto: true,
-        criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail'],
-        notePrompt: 'Depth of crushed rock used?',
+        photoOnly: true,
       }),
       item('services_protected', 'Services have been identified and protected', {
         requirePhoto: true,
-        criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail'],
+        photoOnly: true,
       }),
     ],
   },

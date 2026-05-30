@@ -395,7 +395,6 @@ function V2SectionPage({
   const isReadOnly = runStatus !== 'active';
   const isBlocked = sectionState.status === 'blocked';
   const canSubmit = !isReadOnly && !isBlocked;
-  const isPhotoOnlySection = sectionCode === 'setup_protection';
 
   useEffect(() => {
     return () => {
@@ -431,13 +430,7 @@ function V2SectionPage({
     setSaved(false);
     try {
       const fd = new FormData();
-      const submittedAnswers = isPhotoOnlySection
-        ? items.reduce<Answers>((next, item) => {
-            next[item.key] = { result: 'pass', note: answers[item.key]?.note ?? '' };
-            return next;
-          }, {})
-        : answers;
-      fd.set('answers', JSON.stringify(submittedAnswers));
+      fd.set('answers', JSON.stringify(answers));
       for (const [itemKey, files] of Object.entries(photoFiles)) {
         for (const file of files) fd.append(`item_${itemKey}`, file);
       }
@@ -567,9 +560,9 @@ function V2SectionPage({
                   )}
                 </div>
 
-                {!isPhotoOnlySection && (
-                  <div className="flex flex-wrap gap-3">
-                    {(item.allowNa
+                <div className="flex flex-wrap gap-3">
+                  {!item.photoOnly &&
+                    (item.allowNa
                       ? (['pass', 'fail', 'not_required'] as const)
                       : (['pass', 'fail'] as const)
                     ).map((r) => (
@@ -585,14 +578,15 @@ function V2SectionPage({
                         <span>{r === 'not_required' ? 'N/A' : r.charAt(0).toUpperCase() + r.slice(1)}</span>
                       </label>
                     ))}
-                  </div>
-                )}
+                </div>
 
                 {/* Note field: always shown on fail; also shown when noteRequiredWhen matches
                     or when an existing note is present (so pre-populated notes remain visible) */}
-                {(result === 'fail' ||
-                  (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail' | 'not_required') ||
-                  Boolean(answers[item.key]?.note)) && (() => {
+                {!item.photoOnly &&
+                  (result === 'fail' ||
+                    (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail' | 'not_required') ||
+                    Boolean(answers[item.key]?.note)) &&
+                  (() => {
                   const noteIsRequired =
                     result === 'fail' ||
                     (item.noteRequiredWhen ?? []).includes(result as 'pass' | 'fail' | 'not_required');
@@ -619,8 +613,8 @@ function V2SectionPage({
                 {/* Saved photo evidence — always visible when photos exist */}
                 <SavedPhotos savedCount={savedPhotoCount} loadedPhotos={loadedPhotos} />
 
-                {/* Upload section — hidden when N/A is selected (photo not required) */}
-                {item.requirePhoto && (isPhotoOnlySection || result !== 'not_required') && (
+                {/* Upload section — photo-only items always show upload; others hide when N/A selected */}
+                {item.requirePhoto && (item.photoOnly || result !== 'not_required') && (
                   <div>
                     <p className="text-xs text-gray-600 mb-1.5">
                       {savedPhotoCount > 0 ? 'Add more photos (optional)' : 'Photos'}

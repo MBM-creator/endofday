@@ -5,8 +5,21 @@ import "./globals.css";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Daily Reports - Made By Mobbs",
-  description: "Daily site report submission",
+  title: "QA Checks - Made By Mobbs",
+  description: "Made By Mobbs job QA checks",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "QA Checks",
+    statusBarStyle: "black-translucent",
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
 };
 
 export const viewport = { themeColor: "#0F172A" };

@@ -1,18 +1,17 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
-import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariationsSummary';
+import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
 
 interface Job {
   id: string;
-  organisation_id: string;
   name: string;
-  site_id: string | null;
-  created_at: string;
   active_stage_id?: string | null;
   cc_project_id?: string | null;
   cc_client_id?: string | null;
@@ -20,53 +19,71 @@ interface Job {
   cc_client_name_snapshot?: string | null;
 }
 
-interface ChecklistTemplateItem {
-  id: string;
-  item_type: string;
-  label: string;
-  sort_order: number;
-}
-
 interface Stage {
   id: string;
   job_id: string;
   name: string;
-  sort_order: number;
-  created_at: string;
-  checklist_template_id?: string | null;
-  cc_project_id?: string | null;
   cc_section_id?: string | null;
   cc_section_name_snapshot?: string | null;
   cc_section_trade?: string | null;
-  daily_note?: string | null;
-  daily_note_updated_at?: string | null;
-  checklist_templates?: { name: string; checklist_template_items?: ChecklistTemplateItem[] } | null;
+  checklist_templates?: { name: string } | { name: string }[] | null;
 }
 
-interface PreCommencementPhoto {
-  id: string;
-  storage_path: string;
-  created_at: string;
-  url: string;
-}
-
-interface JobBrief {
+interface QaRun {
   id: string;
   job_id: string;
-  content: string | null;
-  updated_at: string;
+  stage_id: string | null;
+  status: string;
+  setup_version: number | null;
+  setup?: unknown;
+  started_at: string;
+  updated_at?: string | null;
+  completed_at?: string | null;
+  supervisor_final_approved_at?: string | null;
+  qa_type?: string | null;
 }
 
-interface EndOfDay {
-  submitted: boolean;
-  submittedAt: string | null;
-  summary: string | null;
+function templateName(stage: Stage | null): string {
+  const template = stage?.checklist_templates;
+  if (Array.isArray(template)) return template[0]?.name ?? '';
+  return template?.name ?? '';
 }
 
-interface EndOfDayHistoryEntry {
-  reportDate: string;
-  submittedAt: string;
-  summary: string | null;
+function isPavingStage(stage: Stage | null, ccProject: CcProject | null): boolean {
+  const trade = (stage?.cc_section_trade ?? '').toLowerCase().replace(/_/g, ' ');
+  const name = (stage?.name ?? '').toLowerCase();
+  const template = templateName(stage).toLowerCase();
+  const trades = new Set(ccProject?.trades ?? []);
+  return trade.includes('paving') || name.includes('paving') || template.includes('paving') || trades.has('paving');
+}
+
+function isIrrigationStage(stage: Stage | null, ccProject: CcProject | null): boolean {
+  const trade = (stage?.cc_section_trade ?? '').toLowerCase().replace(/_/g, ' ');
+  const name = (stage?.name ?? '').toLowerCase();
+  const template = templateName(stage).toLowerCase();
+  const trades = new Set(ccProject?.trades ?? []);
+  return trade.includes('irrigation') || name.includes('irrigation') || template.includes('irrigation') || trades.has('irrigation');
+}
+
+function isFencingStage(stage: Stage | null, ccProject: CcProject | null): boolean {
+  const trade = (stage?.cc_section_trade ?? '').toLowerCase().replace(/_/g, ' ');
+  const name = (stage?.name ?? '').toLowerCase();
+  const template = templateName(stage).toLowerCase();
+  const trades = new Set(ccProject?.trades ?? []);
+  return trade.includes('fencing') || name.includes('fencing') || template.includes('fencing') || trades.has('fencing');
+}
+
+function runHref(orgSlug: string, jobId: string, run: QaRun, activeStage: Stage | null, ccProject: CcProject | null): string {
+  if (run.qa_type === 'irrigation') {
+    return `/t/${orgSlug}/jobs/${jobId}/qa/irrigation/${run.id}`;
+  }
+  if (run.qa_type === 'fencing') {
+    return `/t/${orgSlug}/jobs/${jobId}/qa/fencing/${run.id}`;
+  }
+  if (run.setup_version === 2 && isPavingStage(activeStage, ccProject)) {
+    return `/t/${orgSlug}/jobs/${jobId}/qa/paving/${run.id}`;
+  }
+  return `/t/${orgSlug}/jobs/${jobId}/qa`;
 }
 
 export default function TodaysWorkPage() {
@@ -76,45 +93,11 @@ export default function TodaysWorkPage() {
 
   const [job, setJob] = useState<Job | null>(null);
   const [ccProject, setCcProject] = useState<CcProject | null>(null);
-  const [activeStage, setActiveStage] = useState<Stage | null>(null);
+  const [stages, setStages] = useState<Stage[]>([]);
+  const [runs, setRuns] = useState<QaRun[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [brief, setBrief] = useState<JobBrief | null>(null);
-  const [briefError, setBriefError] = useState<string | null>(null);
-
-  const [photos, setPhotos] = useState<PreCommencementPhoto[]>([]);
-  const [photosError, setPhotosError] = useState<string | null>(null);
-
-  const [completions, setCompletions] = useState<Record<string, string>>({});
-  const [completionsError, setCompletionsError] = useState<string | null>(null);
-  const [togglingItemId, setTogglingItemId] = useState<string | null>(null);
-
-  const [dailyNote, setDailyNote] = useState('');
-  const [dailyNoteSaving, setDailyNoteSaving] = useState(false);
-  const [dailyNoteError, setDailyNoteError] = useState<string | null>(null);
-
-  const [endOfDay, setEndOfDay] = useState<EndOfDay>({ submitted: false, submittedAt: null, summary: null });
-  const [eodSummary, setEodSummary] = useState('');
-  const [eodSaving, setEodSaving] = useState(false);
-  const [eodError, setEodError] = useState<string | null>(null);
-  const [endOfDayHistory, setEndOfDayHistory] = useState<EndOfDayHistoryEntry[]>([]);
-  const [qaEodWarning, setQaEodWarning] = useState<{ message: string; activeRunId: string } | null>(null);
-
-  const [blockerType, setBlockerType] = useState('');
-  const [blockerNote, setBlockerNote] = useState('');
-  const [blockerSaving, setBlockerSaving] = useState(false);
-  const [blockerError, setBlockerError] = useState<string | null>(null);
-
-  const [crewCount, setCrewCount] = useState(0);
-  const [hoursWorked, setHoursWorked] = useState(0);
-  const [labourSaving, setLabourSaving] = useState(false);
-  const [labourError, setLabourError] = useState<string | null>(null);
-
-  const [quotedLabourHours, setQuotedLabourHours] = useState<number | null>(null);
-  const [actualLabourHoursTotal, setActualLabourHoursTotal] = useState(0);
-
-  // Single consolidated load for Today's Work data
   useEffect(() => {
     if (!orgSlug || !jobId) {
       setError('Job not found');
@@ -127,91 +110,34 @@ export default function TodaysWorkPage() {
     setError(null);
     setJob(null);
     setCcProject(null);
-    setActiveStage(null);
-    setBrief(null);
-    setPhotos([]);
-    setCompletions({});
-    setBriefError(null);
-    setPhotosError(null);
-    setCompletionsError(null);
-    setDailyNote('');
-    setDailyNoteError(null);
-    setEndOfDay({ submitted: false, submittedAt: null, summary: null });
-    setEodSummary('');
-    setEodError(null);
-    setEndOfDayHistory([]);
-    setQaEodWarning(null);
-    setBlockerType('');
-    setBlockerNote('');
-    setBlockerError(null);
-    setCrewCount(0);
-    setHoursWorked(0);
-    setLabourError(null);
-    setQuotedLabourHours(null);
-    setActualLabourHoursTotal(0);
+    setStages([]);
+    setRuns([]);
 
-    fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`)
-      .then((res) => res.json().then((data) => ({ res, data })))
-      .then(({ res, data }: {
-        res: Response;
-        data: {
-          ok?: boolean;
-          job?: Job;
-          ccProject?: CcProject | null;
-          activeStage?: Stage | null;
-          endOfDay?: EndOfDay;
-          brief?: JobBrief | null;
-          photos?: PreCommencementPhoto[];
-          completions?: Record<string, string>;
-          endOfDayHistory?: EndOfDayHistoryEntry[];
-          quotedLabourHours?: number | null;
-          actualLabourHoursTotal?: number;
-          briefError?: string | null;
-          photosError?: string | null;
-          qaEodWarning?: { message: string; activeRunId: string } | null;
-          message?: string;
-        };
-      }) => {
+    Promise.all([
+      fetch(`/api/jobs/${jobId}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`)
+        .then((res) => res.json().then((data) => ({ res, data }))),
+      fetch(`/api/stages?jobId=${encodeURIComponent(jobId)}`)
+        .then((res) => res.json().then((data) => ({ res, data }))),
+    ])
+      .then(([runsResult, stagesResult]) => {
         if (cancelled) return;
-        if (!res.ok || !data?.ok) {
-          setError(typeof data?.message === 'string' ? data.message : 'Failed to load page');
+        const { res: runsRes, data: runsData } = runsResult;
+        if (!runsRes.ok || !runsData?.ok) {
+          setError(typeof runsData?.message === 'string' ? runsData.message : 'Failed to load QA status');
           return;
         }
-        if (!data.job) {
-          setError('Job not found');
-          return;
+        setJob(runsData.job && typeof runsData.job === 'object' ? runsData.job : null);
+        setCcProject(runsData.ccProject && typeof runsData.ccProject === 'object' ? runsData.ccProject : null);
+        setRuns(Array.isArray(runsData.runs) ? runsData.runs : []);
+
+        const { res: stagesRes, data: stagesData } = stagesResult;
+        if (stagesRes.ok && stagesData?.ok && Array.isArray(stagesData.stages)) {
+          setStages(stagesData.stages);
         }
-        setJob(data.job);
-        setCcProject(data.ccProject ?? null);
-        setActiveStage(data.activeStage ?? null);
-        setBrief(data.brief ?? null);
-        setPhotos(Array.isArray(data.photos) ? data.photos : []);
-        setCompletions(typeof data.completions === 'object' && data.completions != null ? data.completions : {});
-        setBriefError(data.briefError ?? null);
-        setPhotosError(data.photosError ?? null);
-        setDailyNote(data.activeStage?.daily_note ?? '');
-        setEndOfDay(
-          data.endOfDay && typeof data.endOfDay.submitted === 'boolean'
-            ? {
-                submitted: data.endOfDay.submitted,
-                submittedAt: data.endOfDay.submittedAt ?? null,
-                summary: data.endOfDay.summary ?? null,
-              }
-            : { submitted: false, submittedAt: null, summary: null }
-        );
-        setEodSummary(data.endOfDay?.summary ?? '');
-        setEndOfDayHistory(Array.isArray(data.endOfDayHistory) ? data.endOfDayHistory : []);
-        setQaEodWarning(
-          data.qaEodWarning && typeof data.qaEodWarning.message === 'string' && data.qaEodWarning.activeRunId
-            ? { message: data.qaEodWarning.message, activeRunId: data.qaEodWarning.activeRunId }
-            : null
-        );
-        setQuotedLabourHours(typeof data.quotedLabourHours === 'number' ? data.quotedLabourHours : (data.quotedLabourHours ?? null));
-        setActualLabourHoursTotal(typeof data.actualLabourHoursTotal === 'number' ? data.actualLabourHoursTotal : 0);
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load page');
+          setError(err instanceof Error ? err.message : 'Failed to load QA status');
         }
       })
       .finally(() => {
@@ -223,627 +149,136 @@ export default function TodaysWorkPage() {
     };
   }, [orgSlug, jobId]);
 
-  async function toggleCompletion(itemId: string, currentlyCompleted: boolean) {
-    if (!activeStage?.id || !orgSlug || togglingItemId) return;
-    setTogglingItemId(itemId);
-    const nextCompleted = !currentlyCompleted;
-    setCompletionsError(null);
-    setCompletions((prev) => {
-      const next = { ...prev };
-      if (nextCompleted) {
-        next[itemId] = new Date().toISOString();
-      } else {
-        delete next[itemId];
-      }
-      return next;
-    });
-    try {
-      const res = await fetch(
-        `/api/stages/${activeStage.id}/checklist-completions?orgSlug=${encodeURIComponent(orgSlug)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ checklistTemplateItemId: itemId, completed: nextCompleted }),
-        }
-      );
-      const data = await res.json();
-      if (!res.ok || !data?.ok) {
-        setCompletions((prev) => {
-          const revert = { ...prev };
-          if (nextCompleted) delete revert[itemId];
-          else revert[itemId] = new Date().toISOString();
-          return revert;
-        });
-        setCompletionsError(typeof data?.message === 'string' ? data.message : 'Could not save');
-      }
-    } catch {
-      setCompletions((prev) => {
-        const revert = { ...prev };
-        if (nextCompleted) delete revert[itemId];
-        else revert[itemId] = new Date().toISOString();
-        return revert;
-      });
-      setCompletionsError('Could not save');
-    } finally {
-      setTogglingItemId(null);
-    }
-  }
+  const activeStage = job?.active_stage_id
+    ? stages.find((stage) => stage.id === job.active_stage_id) ?? null
+    : null;
 
-  async function saveDailyNote() {
-    if (!activeStage?.id || !orgSlug || dailyNoteSaving) return;
-    setDailyNoteSaving(true);
-    setDailyNoteError(null);
-    try {
-      const res = await fetch(
-        `/api/stages/${activeStage.id}/daily-note?orgSlug=${encodeURIComponent(orgSlug)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: dailyNote }),
-        }
-      );
-      const data = await res.json();
-      if (res.ok && data?.ok) {
-        setDailyNote(data.dailyNote ?? '');
-      } else {
-        setDailyNoteError(typeof data?.message === 'string' ? data.message : 'Could not save note');
-      }
-    } catch {
-      setDailyNoteError('Could not save note');
-    } finally {
-      setDailyNoteSaving(false);
-    }
-  }
-
-  async function submitEndOfDay() {
-    if (!activeStage?.id || !orgSlug || eodSaving) return;
-    setEodSaving(true);
-    setEodError(null);
-    try {
-      const res = await fetch(
-        `/api/stages/${activeStage.id}/end-of-day?orgSlug=${encodeURIComponent(orgSlug)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ summary: eodSummary.trim() || undefined }),
-        }
-      );
-      const data = await res.json();
-      if (res.ok && data?.ok) {
-        setEndOfDay({
-          submitted: true,
-          submittedAt: data.submittedAt ?? new Date().toISOString(),
-          summary: data.summary ?? (eodSummary.trim() || null),
-        });
-      } else {
-        setEodError(typeof data?.message === 'string' ? data.message : 'Could not save');
-      }
-    } catch {
-      setEodError('Could not save');
-    } finally {
-      setEodSaving(false);
-    }
-  }
-
-  async function saveBlocker() {
-    if (!activeStage?.id || !orgSlug || blockerSaving) return;
-    setBlockerSaving(true);
-    setBlockerError(null);
-    const typeTrimmed = blockerType.trim();
-    const noteTrimmed = blockerNote.trim() || null;
-    const payload = typeTrimmed ? { blockerType: typeTrimmed, note: noteTrimmed } : { blockerType: null, note: noteTrimmed };
-    try {
-      const res = await fetch(
-        `/api/stages/${activeStage.id}/blocker?orgSlug=${encodeURIComponent(orgSlug)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-        }
-      );
-      const data = await res.json();
-      if (res.ok && data?.ok) {
-        setBlockerType(data.blockerType ?? '');
-        setBlockerNote(data.note ?? '');
-      } else {
-        setBlockerError(typeof data?.message === 'string' ? data.message : 'Could not save blocker');
-      }
-    } catch {
-      setBlockerError('Could not save blocker');
-    } finally {
-      setBlockerSaving(false);
-    }
-  }
-
-  async function saveLabour() {
-    if (!activeStage?.id || !orgSlug || labourSaving) return;
-    const crew = Math.max(0, Number(crewCount));
-    const hours = Math.max(0, Number(hoursWorked));
-    setLabourSaving(true);
-    setLabourError(null);
-    try {
-      const res = await fetch(
-        `/api/stages/${activeStage.id}/labour?orgSlug=${encodeURIComponent(orgSlug)}`,
-        {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ crewCount: crew, hoursWorked: hours }),
-        }
-      );
-      const data = await res.json();
-      if (res.ok && data?.ok) {
-        setCrewCount(typeof data.crewCount === 'number' ? data.crewCount : crew);
-        setHoursWorked(typeof data.hoursWorked === 'number' ? data.hoursWorked : hours);
-        const refetchRes = await fetch(`/api/jobs/${jobId}/today?orgSlug=${encodeURIComponent(orgSlug)}`);
-        const refetchData = await refetchRes.json();
-        if (refetchRes.ok && refetchData?.ok && typeof refetchData.actualLabourHoursTotal === 'number') {
-          setActualLabourHoursTotal(refetchData.actualLabourHoursTotal);
-        }
-      } else {
-        setLabourError(typeof data?.message === 'string' ? data.message : 'Could not save labour');
-      }
-    } catch {
-      setLabourError('Could not save labour');
-    } finally {
-      setLabourSaving(false);
-    }
-  }
-
-  const hasActiveStage = !!activeStage;
-
-  const checklistItems = activeStage?.checklist_templates?.checklist_template_items ?? [];
-  const checklistTotal = checklistItems.length;
-  const checklistCompleted = checklistItems.filter((item) => completions[item.id]).length;
-  const hasSavedNote = ((activeStage?.daily_note ?? '').trim() !== '');
-  const eodSubmitted = endOfDay.submitted;
-  const lastUpdatedAt = (() => {
-    const candidates: number[] = [];
-    if (typeof activeStage?.daily_note_updated_at === 'string') {
-      const t = new Date(activeStage.daily_note_updated_at).getTime();
-      if (!Number.isNaN(t)) candidates.push(t);
-    }
-    for (const iso of Object.values(completions)) {
-      if (typeof iso === 'string') {
-        const t = new Date(iso).getTime();
-        if (!Number.isNaN(t)) candidates.push(t);
-      }
-    }
-    if (eodSubmitted && typeof endOfDay.submittedAt === 'string') {
-      const t = new Date(endOfDay.submittedAt).getTime();
-      if (!Number.isNaN(t)) candidates.push(t);
-    }
-    if (candidates.length === 0) return null;
-    return new Date(Math.max(...candidates)).toISOString();
-  })();
+  const currentRuns = runs.filter((run) => run.qa_type === 'irrigation' || run.qa_type === 'fencing' || run.setup_version === 2);
+  const activeRuns = currentRuns.filter((run) => run.status === 'active');
+  const activeRun =
+    activeRuns.find((run) => run.qa_type === 'irrigation' && isIrrigationStage(activeStage, ccProject)) ??
+    activeRuns.find((run) => run.qa_type === 'fencing' && isFencingStage(activeStage, ccProject)) ??
+    activeRuns.find((run) => (run.qa_type ?? 'paving') === 'paving' && isPavingStage(activeStage, ccProject)) ??
+    activeRuns[0] ??
+    null;
+  const latestApprovedRun =
+    currentRuns.find((run) => run.status === 'completed' && run.supervisor_final_approved_at) ?? null;
+  const hasLegacyRuns = runs.some((run) => run.setup_version !== 2 && run.qa_type !== 'irrigation' && run.qa_type !== 'fencing');
+  const qaHubHref = `/t/${orgSlug}/jobs/${jobId}/qa`;
+  const detailHref = `/t/${orgSlug}/jobs/${jobId}`;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
+        {loading && <p className="text-gray-600">Loading…</p>}
+
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
+          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
             {error}
           </div>
         )}
 
-        {loading && (
-          <p className="text-gray-600">Loading…</p>
-        )}
-
-        {!loading && !error && job && !hasActiveStage && (
-          <div className="space-y-4">
-            <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
-            <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-              <p className="text-gray-700">No active stage set. Set the active stage on the job detail page.</p>
-              <Link
-                href={`/t/${orgSlug}/jobs/${jobId}`}
-                className="mt-3 inline-block text-sm font-medium text-[#698F00] hover:underline"
-              >
-                Go to job detail
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {!loading && !error && job && hasActiveStage && activeStage && (
+        {!loading && !error && job && (
           <div className="space-y-6">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{job.name}</h1>
+              <Link href={detailHref} className="text-sm text-[#698F00] hover:underline">
+                ← Full job detail
+              </Link>
+              <h1 className="mt-2 text-2xl font-bold text-gray-900">{job.name}</h1>
               <ClientConnectJobSummary
                 job={job}
                 compact
                 className="mt-1"
                 emptyText="No Client Connect project linked."
               />
-              <p className="mt-1 text-lg font-medium text-[#698F00]">{activeStage.name}</p>
-              <div className="mt-1 flex flex-wrap gap-2">
-                <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
-                  Today&apos;s stage
-                </span>
-                {activeStage.cc_section_id && (
-                  <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
-                    Client Connect section
-                    {activeStage.cc_section_trade ? ` · ${activeStage.cc_section_trade.replace('_', ' ')}` : ''}
-                  </span>
-                )}
-              </div>
+              {activeStage && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="text-sm font-medium text-[#698F00]">{activeStage.name}</span>
+                  {activeStage.cc_section_trade && (
+                    <span className="text-xs font-medium text-gray-700 bg-gray-100 px-2 py-0.5 rounded">
+                      {activeStage.cc_section_trade.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
-            {ccProject && (
-              <ClientConnectVariationsSummary variations={ccProject.variations} />
+            <JobActivityFeed
+              orgSlug={orgSlug}
+              jobId={jobId}
+              stages={stages.map((stage) => ({ id: stage.id, name: stage.name }))}
+              activeStageId={job.active_stage_id ?? null}
+              compact
+            />
+
+            {!job.active_stage_id && (
+              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <p className="text-gray-700">No active stage set. Set the active stage on the job detail page.</p>
+                <Link href={detailHref} className="mt-3 inline-block text-sm font-medium text-[#698F00] hover:underline">
+                  Go to job detail
+                </Link>
+              </div>
             )}
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 px-3 bg-white/80 border border-gray-200 rounded-lg text-sm text-gray-600">
-              <span>
-                Checklist {checklistCompleted} / {checklistTotal}
-              </span>
-              <span>{hasSavedNote ? <span className="text-[#698F00]">Note</span> : 'No note'}</span>
-              <span>{eodSubmitted ? <span className="text-[#698F00]">Done for today</span> : 'Not done'}</span>
-            </div>
-            {(() => {
-              const w: string[] = [];
-              if (checklistTotal > 0 && checklistCompleted < checklistTotal) w.push('Checklist incomplete');
-              if (!hasSavedNote) w.push('No daily note');
-              if (!eodSubmitted) w.push('Awaiting end-of-day');
-              return w.length > 0 ? (
-                <div className="py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
-                  {w.join(' · ')}
-                </div>
-              ) : null;
-            })()}
-            {lastUpdatedAt && (() => {
-              const d = new Date(lastUpdatedAt);
-              if (Number.isNaN(d.getTime())) return null;
-              return (
-                <p className="mt-2 text-sm text-gray-500">
-                  Last updated {d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' })}
+            {job.active_stage_id && activeRun && (
+              <div className="p-5 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <p className="text-sm font-medium text-amber-800">QA in progress</p>
+                <p className="mt-1 text-gray-700">
+                  Continue the active QA run for today&apos;s work.
                 </p>
-              );
-            })()}
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Job brief</h2>
-              {briefError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {briefError}
-                </div>
-              )}
-              {!briefError && (
-                <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                  {brief && brief.content !== null && brief.content !== '' ? (
-                    <pre className="whitespace-pre-wrap font-sans text-gray-900 text-sm break-words">
-                      {brief.content}
-                    </pre>
-                  ) : (
-                    <p className="text-gray-500 text-sm">No job brief yet.</p>
-                  )}
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Daily notes</h2>
-              {dailyNoteError && (
-                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {dailyNoteError}
-                </div>
-              )}
-              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <textarea
-                  value={dailyNote}
-                  onChange={(e) => setDailyNote(e.target.value)}
-                  rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm resize-y min-h-[80px]"
-                  placeholder="Notes for today's stage…"
-                  disabled={dailyNoteSaving}
-                  aria-label="Daily notes"
-                />
-                <button
-                  type="button"
-                  onClick={saveDailyNote}
-                  disabled={dailyNoteSaving}
-                  className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                <Link
+                  href={runHref(orgSlug, jobId, activeRun, activeStage, ccProject)}
+                  className="mt-4 inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
                 >
-                  {dailyNoteSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Blocker</h2>
-              {blockerType && (
-                <div className="mb-2 py-1.5 px-2 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
-                  &#9888; Blocked: {blockerType}
-                  {blockerNote && (
-                    <p className="mt-1 text-amber-800/90">{blockerNote}</p>
-                  )}
-                </div>
-              )}
-              {blockerError && (
-                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {blockerError}
-                </div>
-              )}
-              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <select
-                  value={blockerType}
-                  onChange={(e) => setBlockerType(e.target.value)}
-                  disabled={blockerSaving}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm bg-white disabled:opacity-50"
-                  aria-label="Blocker type"
-                >
-                  <option value="">None</option>
-                  <option value="Materials missing">Materials missing</option>
-                  <option value="Client decision required">Client decision required</option>
-                  <option value="Weather">Weather</option>
-                  <option value="Access issue">Access issue</option>
-                  <option value="Other">Other</option>
-                </select>
-                <textarea
-                  value={blockerNote}
-                  onChange={(e) => setBlockerNote(e.target.value)}
-                  rows={2}
-                  className="mt-2 w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm resize-y min-h-[60px]"
-                  placeholder="Optional note…"
-                  disabled={blockerSaving}
-                  aria-label="Blocker note"
-                />
-                <button
-                  type="button"
-                  onClick={saveBlocker}
-                  disabled={blockerSaving}
-                  className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  {blockerSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Labour today</h2>
-              {labourError && (
-                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {labourError}
-                </div>
-              )}
-              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Crew size</label>
-                <input
-                  type="number"
-                  min={0}
-                  value={crewCount}
-                  onChange={(e) => setCrewCount(Math.max(0, Number(e.target.value) || 0))}
-                  disabled={labourSaving}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm disabled:opacity-50"
-                  aria-label="Crew size"
-                />
-                <label className="block mt-2 text-sm font-medium text-gray-700 mb-1">Hours worked</label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.5}
-                  value={hoursWorked}
-                  onChange={(e) => setHoursWorked(Math.max(0, Number(e.target.value) || 0))}
-                  disabled={labourSaving}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm disabled:opacity-50"
-                  aria-label="Hours worked"
-                />
-                <p className="mt-2 text-sm text-gray-600">
-                  Total labour: {crewCount * hoursWorked} hours
-                </p>
-                <button
-                  type="button"
-                  onClick={saveLabour}
-                  disabled={labourSaving}
-                  className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                >
-                  {labourSaving ? 'Saving…' : 'Save'}
-                </button>
-              </div>
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Quoted vs actual labour</h2>
-              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                <p className="text-sm text-gray-600">
-                  Quoted labour: {quotedLabourHours != null ? `${quotedLabourHours}h` : '—'}
-                </p>
-                <p className="mt-1 text-sm text-gray-600">
-                  Actual labour: {actualLabourHoursTotal}h
-                </p>
-                {quotedLabourHours != null && (
-                  <p className="mt-1 text-sm text-gray-600">
-                    {actualLabourHoursTotal <= quotedLabourHours
-                      ? `Remaining: ${quotedLabourHours - actualLabourHoursTotal}h`
-                      : `Overrun: ${actualLabourHoursTotal - quotedLabourHours}h`}
-                  </p>
+                  Continue QA run →
+                </Link>
+                {activeRuns.length > 1 && (
+                  <Link href={qaHubHref} className="ml-3 mt-4 inline-block py-2 px-4 rounded-lg font-medium text-[#698F00] border border-[#698F00]/30 hover:bg-[#698F00]/5 transition-colors">
+                    View all QA
+                  </Link>
                 )}
               </div>
-            </section>
+            )}
 
-            {qaEodWarning && (
-              <section className="mb-4">
-                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg text-amber-950 text-sm">
-                  <p>{qaEodWarning.message}</p>
+            {job.active_stage_id && !activeRun && latestApprovedRun && (
+              <div className="p-5 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <p className="text-sm font-medium text-[#698F00]">Latest QA approved</p>
+                <p className="mt-1 text-gray-700">
+                  There is no active QA run. Supervisors can choose the next required QA checklist from the QA hub.
+                </p>
+                <div className="mt-4 flex flex-wrap gap-3">
                   <Link
-                    href={`/t/${orgSlug}/jobs/${jobId}/qa/paving/${qaEodWarning.activeRunId}`}
-                    className="mt-2 inline-block font-medium text-[#698F00] hover:underline"
+                    href={runHref(orgSlug, jobId, latestApprovedRun, activeStage, ccProject)}
+                    className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
                   >
-                    Open paving QA run
+                    View latest QA
+                  </Link>
+                  <Link href={qaHubHref} className="inline-block py-2 px-4 rounded-lg font-medium text-[#698F00] border border-[#698F00]/30 hover:bg-[#698F00]/5 transition-colors">
+                    Open QA hub
                   </Link>
                 </div>
-              </section>
+              </div>
             )}
 
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">End of day</h2>
-              {eodError && (
-                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {eodError}
-                </div>
-              )}
-              {endOfDay.submitted ? (
-                <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                  <p className="font-medium text-[#698F00]">Done for today</p>
-                  {endOfDay.submittedAt && (
-                    <p className="mt-1 text-sm text-gray-600">
-                      Submitted {new Date(endOfDay.submittedAt).toLocaleString()}
-                    </p>
-                  )}
-                  {endOfDay.summary && (
-                    <pre className="mt-2 whitespace-pre-wrap font-sans text-gray-900 text-sm break-words">
-                      {endOfDay.summary}
-                    </pre>
-                  )}
-                </div>
-              ) : (
-                <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                  <textarea
-                    value={eodSummary}
-                    onChange={(e) => setEodSummary(e.target.value)}
-                    rows={3}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#698F00] focus:border-transparent text-gray-900 text-sm resize-y min-h-[60px]"
-                    placeholder="Optional short summary…"
-                    disabled={eodSaving}
-                    aria-label="End of day summary"
-                  />
-                  <button
-                    type="button"
-                    onClick={submitEndOfDay}
-                    disabled={eodSaving}
-                    className="mt-2 bg-[#698F00] text-white py-2 px-4 rounded-lg font-medium hover:bg-[#5a7d00] disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                  >
-                    {eodSaving ? 'Submitting…' : 'Mark as done for today'}
-                  </button>
-                </div>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Recent end-of-day</h2>
-              <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                {endOfDayHistory.length === 0 ? (
-                  <p className="text-sm text-gray-500">No recent submissions</p>
-                ) : (
-                  <ul className="space-y-3 text-sm text-gray-700">
-                    {endOfDayHistory.map((entry, idx) => (
-                      <li key={`${entry.reportDate}-${idx}`} className="border-b border-gray-100 last:border-0 last:pb-0 pb-3">
-                        <span className="font-medium text-gray-900">
-                          {(() => {
-                            const parts = entry.reportDate.split('-');
-                            if (parts.length === 3) {
-                              const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-                              return Number.isNaN(d.getTime()) ? entry.reportDate : d.toLocaleDateString(undefined, { dateStyle: 'short' });
-                            }
-                            return entry.reportDate;
-                          })()}
-                        </span>
-                        <span className="ml-2 text-gray-500">
-                          {new Date(entry.submittedAt).toLocaleTimeString(undefined, { timeStyle: 'short' })}
-                        </span>
-                        {entry.summary && (
-                          <pre className="mt-1 whitespace-pre-wrap font-sans text-gray-600 break-words">
-                            {entry.summary}
-                          </pre>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
+            {job.active_stage_id && !activeRun && !latestApprovedRun && (
+              <div className="p-5 bg-white border border-gray-200 rounded-lg shadow-sm">
+                <p className="text-sm font-medium text-gray-900">No active QA run</p>
+                <p className="mt-1 text-gray-700">
+                  Start from the QA hub so the supervisor can select the checklist needed for this stage or project.
+                </p>
+                {hasLegacyRuns && (
+                  <p className="mt-2 text-sm text-amber-800">
+                    Legacy QA runs exist for this job, but they are not treated as current V2 runs.
+                  </p>
                 )}
+                <Link
+                  href={qaHubHref}
+                  className="mt-4 inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                >
+                  Open QA hub
+                </Link>
               </div>
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Pre-commencement photos</h2>
-              {photosError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {photosError}
-                </div>
-              )}
-              {!photosError && photos.length > 0 && (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {photos.map((photo) => (
-                    <img
-                      key={photo.id}
-                      src={photo.url}
-                      alt="Pre-commencement photo"
-                      className="w-full aspect-square object-cover rounded-lg border border-gray-200 bg-gray-100"
-                    />
-                  ))}
-                </div>
-              )}
-              {!photosError && photos.length === 0 && (
-                <p className="text-gray-500 text-sm">No photos yet.</p>
-              )}
-            </section>
-
-            <section>
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">Checklist</h2>
-              {completionsError && (
-                <div className="mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-800 text-sm">
-                  {completionsError}
-                </div>
-              )}
-              {activeStage.checklist_templates?.checklist_template_items &&
-              activeStage.checklist_templates.checklist_template_items.length > 0 ? (
-                (() => {
-                  const items = [...activeStage.checklist_templates.checklist_template_items].sort(
-                    (a, b) => a.sort_order - b.sort_order
-                  );
-                  const byType = {
-                    tools: items.filter((i) => i.item_type === 'tools'),
-                    materials: items.filter((i) => i.item_type === 'materials'),
-                    qc: items.filter((i) => i.item_type === 'qc'),
-                  };
-                  const groups = [
-                    { key: 'tools' as const, label: 'Tools', list: byType.tools },
-                    { key: 'materials' as const, label: 'Materials', list: byType.materials },
-                    { key: 'qc' as const, label: 'QC', list: byType.qc },
-                  ];
-                  const checklistDisabled = !!togglingItemId;
-                  return (
-                    <div className="space-y-3 p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
-                      {groups.map(
-                        (g) =>
-                          g.list.length > 0 && (
-                            <div key={g.key}>
-                              <span className="font-medium text-gray-700">{g.label}:</span>
-                              <ul className="mt-0.5 ml-3 list-none text-gray-600 text-sm space-y-1">
-                                {g.list.map((item) => (
-                                  <li key={item.id} className="flex items-center gap-2">
-                                    <input
-                                      type="checkbox"
-                                      id={`check-${item.id}`}
-                                      checked={!!completions[item.id]}
-                                      onChange={() => toggleCompletion(item.id, !!completions[item.id])}
-                                      disabled={checklistDisabled}
-                                      className="h-4 w-4 rounded border-gray-300 text-[#698F00] focus:ring-[#698F00] disabled:opacity-50"
-                                      aria-label={item.label}
-                                    />
-                                    <label htmlFor={`check-${item.id}`} className="flex-1 cursor-pointer">
-                                      {item.label}
-                                    </label>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
-                          )
-                      )}
-                    </div>
-                  );
-                })()
-              ) : (
-                <p className="text-gray-500 text-sm">No checklist items for this stage.</p>
-              )}
-            </section>
-
-            <p className="pt-2">
-              <Link
-                href={`/t/${orgSlug}/jobs/${jobId}`}
-                className="text-sm font-medium text-[#698F00] hover:underline"
-              >
-                Full job detail
-              </Link>
-            </p>
+            )}
           </div>
         )}
       </div>

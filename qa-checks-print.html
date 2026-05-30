@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Paving QA v2 — Checks by Stage</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: -apple-system, Arial, sans-serif;
+    font-size: 10pt;
+    color: #111;
+    background: #fff;
+    padding: 20mm 15mm;
+  }
+
+  h1 {
+    font-size: 16pt;
+    font-weight: 700;
+    margin-bottom: 2mm;
+  }
+
+  .subtitle {
+    font-size: 9pt;
+    color: #555;
+    margin-bottom: 6mm;
+  }
+
+  .summary {
+    display: flex;
+    gap: 12mm;
+    margin-bottom: 8mm;
+    padding: 4mm 0;
+    border-top: 2px solid #111;
+    border-bottom: 1px solid #ccc;
+  }
+
+  .summary-stat { text-align: center; }
+  .summary-stat .value { font-size: 18pt; font-weight: 700; }
+  .summary-stat .label { font-size: 8pt; color: #555; }
+
+  .group {
+    margin-bottom: 8mm;
+    page-break-inside: avoid;
+  }
+
+  .group-header {
+    display: flex;
+    align-items: baseline;
+    gap: 6mm;
+    padding: 2.5mm 0 1.5mm;
+    border-top: 2px solid #111;
+    margin-bottom: 3mm;
+  }
+
+  .group-title {
+    font-size: 12pt;
+    font-weight: 700;
+  }
+
+  .group-applies {
+    font-size: 8pt;
+    color: #555;
+  }
+
+  .section {
+    margin-bottom: 5mm;
+    page-break-inside: avoid;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    background: #f4f4f4;
+    padding: 2mm 3mm;
+    border-left: 3px solid #222;
+    margin-bottom: 0;
+  }
+
+  .section-title {
+    font-size: 10pt;
+    font-weight: 700;
+  }
+
+  .section-code {
+    font-size: 7.5pt;
+    color: #666;
+    font-family: monospace;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+  }
+
+  thead th {
+    text-align: left;
+    font-weight: 700;
+    font-size: 8pt;
+    color: #555;
+    padding: 1.5mm 2mm;
+    border-bottom: 1px solid #ccc;
+    background: #fafafa;
+  }
+
+  td {
+    padding: 1.8mm 2mm;
+    border-bottom: 1px solid #e8e8e8;
+    vertical-align: top;
+    line-height: 1.4;
+  }
+
+  tr:last-child td { border-bottom: none; }
+
+  .col-check { width: 68%; }
+  .col-photo { width: 10%; text-align: center; }
+  .col-note  { width: 14%; }
+  .col-na    { width: 8%;  text-align: center; }
+
+  .tick { color: #111; font-size: 11pt; }
+  .badge {
+    display: inline-block;
+    font-size: 7.5pt;
+    padding: 0 2mm;
+    border: 1px solid #aaa;
+    border-radius: 2px;
+    color: #444;
+    white-space: nowrap;
+  }
+  .badge-warn { border-color: #b07000; color: #7a4e00; background: #fff8e6; }
+
+  .applies-note {
+    font-size: 7.5pt;
+    color: #888;
+    font-style: italic;
+    padding: 1mm 3mm 1mm 3mm;
+    background: #fafafa;
+  }
+
+  .legend {
+    margin-top: 10mm;
+    padding-top: 4mm;
+    border-top: 1px solid #ccc;
+    font-size: 8pt;
+    color: #555;
+    line-height: 1.8;
+  }
+
+  @media print {
+    body { padding: 10mm 12mm; }
+    .group { page-break-inside: avoid; }
+    .section { page-break-inside: avoid; }
+    a { text-decoration: none; color: inherit; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Paving QA v2 &mdash; Checks by Stage</h1>
+<p class="subtitle">Complete check list across all 18 stages &bull; Print or save as PDF</p>
+
+<div class="summary">
+  <div class="summary-stat"><div class="value">18</div><div class="label">Stages</div></div>
+  <div class="summary-stat"><div class="value">86</div><div class="label">Total checks</div></div>
+  <div class="summary-stat"><div class="value">82</div><div class="label">Photo required</div></div>
+  <div class="summary-stat"><div class="value">42</div><div class="label">Note required</div></div>
+</div>
+
+<!-- ───────────────── UNIVERSAL ───────────────── -->
+<div class="group">
+  <div class="group-header">
+    <span class="group-title">Universal</span>
+    <span class="group-applies">All runs</span>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Setup &amp; Property Protection</span>
+      <span class="section-code">setup_protection</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th class="col-check">Check</th>
+        <th class="col-photo">Photo</th>
+        <th class="col-note">Note required</th>
+        <th class="col-na">N/A</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>Client property protection installed before works begin</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Existing site condition photographed before work starts</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Access route suitable and protected for materials, machinery or barrows</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Existing irrigation, lighting, drains and services identified and protected where visible or known</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Supervisor has reviewed plan, levels, finished heights and work area before paving preparation proceeds</td><td class="col-photo"></td><td></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Drainage Falls &amp; Set-Out</span>
+      <span class="section-code">drainage_falls</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th class="col-check">Check</th>
+        <th class="col-photo">Photo</th>
+        <th class="col-note">Note required</th>
+        <th class="col-na">N/A</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>Drainage decision recorded and acceptable for the site</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Fall directs water away from buildings, thresholds and vulnerable structures</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Water is not directed toward neighbouring property unless specifically designed and approved</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Critical thresholds, doors, weep holes, pool coping, retaining walls and fixed edges have been checked</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Fall/discharge point has been checked using string line, laser, level or other reliable method</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge">pass</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Excavation &amp; Sub-Base Preparation</span>
+      <span class="section-code">excavation_preparation</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th class="col-check">Check</th>
+        <th class="col-photo">Photo</th>
+        <th class="col-note">Note required</th>
+        <th class="col-na">N/A</th>
+      </tr></thead>
+      <tbody>
+        <tr><td>Excavation depth suits concrete build-up, paving thickness, adhesive/wet bed allowance and finished height</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Soft spots, roots, organic material and loose material removed</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Subgrade is firm and suitable for the specified concrete base</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Services have been identified and protected</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Finished paving height has been checked against doors, thresholds, drains, steps, pool coping and adjacent surfaces</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ───────────────── CONCRETE BASE ───────────────── -->
+<div class="group">
+  <div class="group-header">
+    <span class="group-title">Concrete Base</span>
+    <span class="group-applies">concrete_base_wet_bed &bull; glue_new_concrete</span>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Concrete Formwork</span>
+      <span class="section-code">concrete_formwork</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Formwork installed to correct shape, line and finished height</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Formwork is secure, braced and suitable for the pour</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Curves, edges, corners and transitions match the intended set-out</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Isolation or expansion allowance has been considered where concrete meets fixed structures</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Formwork fall has been checked before reinforcement/pour</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Concrete Reinforcement</span>
+      <span class="section-code">concrete_reinforcement</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Reinforcement mesh installed where specified</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+        <tr><td>Mesh is chaired correctly and not sitting on ground</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Mesh overlaps by at least 2 squares</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Reinforcement does not interfere with drains, falls, penetrations or edge details</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"><span class="tick">&#10003;</span></td></tr>
+        <tr><td>Where required, starter bars have been installed</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"><span class="tick">&#10003;</span></td></tr>
+        <tr><td>Driveway/high-load reinforcement requirements checked where applicable</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Pre-Pour Inspection</span>
+      <span class="section-code">concrete_pre_pour</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Site protection still in place before pour</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Excavation, formwork, fall and reinforcement checks complete before pour</td><td class="col-photo"></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Drainage decision accepted before pour</td><td class="col-photo"></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Finished heights checked before pour</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Supervisor approves concrete base ready to pour</td><td class="col-photo"></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Concrete Pour &amp; Finish</span>
+      <span class="section-code">concrete_pour_finish</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Concrete poured to specified depth and build-up</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Concrete consolidated, screeded and finished suitable for next paving method</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Falls maintained after screeding</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Drains, penetrations, edges and thresholds remain correct after pour</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Concrete protected and curing requirements in place</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ───────────────── WET BED ───────────────── -->
+<div class="group">
+  <div class="group-header">
+    <span class="group-title">Wet Bed</span>
+    <span class="group-applies">crushed_rock_wet_bed &bull; concrete_base_wet_bed</span>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Crushed Rock Base</span>
+      <span class="section-code">crushed_rock_base</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Crushed rock material matches the job specification</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Crushed rock depth matches the job specification</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Crushed rock spread evenly with no obvious soft, loose or unstable areas</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Crushed rock compacted properly with suitable equipment</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Base is firm after compaction with no pumping, rocking or obvious movement</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Falls have been shaped into the compacted base</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Edge restraint or containment has been considered before wet bed starts</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+        <tr><td>Driveway/heavy-use base requirements checked where applicable</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Wet Bed Preparation</span>
+      <span class="section-code">wet_bed_preparation</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Wet bed material/mix matches the job specification</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Wet bed thickness is suitable for paver/stone type and finished levels</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Bedding method allows required finished falls and levels</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Slurry/bonding method is used where required</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+        <tr><td>Pavers/stone are not being laid onto dry, loose or unstable bedding</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Wet bed is not being used to hide poor base preparation or incorrect levels</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>First wet bed area checked before continuing broadly</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ───────────────── ADHESIVE ───────────────── -->
+<div class="group">
+  <div class="group-header">
+    <span class="group-title">Adhesive / Existing Concrete</span>
+    <span class="group-applies">glue_existing_concrete &bull; glue_new_concrete</span>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Existing Concrete Assessment</span>
+      <span class="section-code">existing_concrete_assessment</span>
+    </div>
+    <div class="applies-note">Applies to glue_existing_concrete only</div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Existing concrete is structurally sound and suitable to receive paving</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Existing concrete has suitable fall and does not pond water</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Finished height allows for adhesive and paver thickness without creating threshold, trip or drainage issues</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Cracks, movement joints and existing slab joints have been identified</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+        <tr><td>Existing concrete does not trap water against house, wall, pool coping, fence, retaining wall or neighbouring property</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Adhesive Surface Preparation</span>
+      <span class="section-code">adhesive_surface_preparation</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Surface cleaned of dust, dirt, oil, loose material, paint, sealer, laitance or contaminants</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Surface preparation method is suitable for the adhesive system</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Surface is dry/suitable enough for adhesive according to product requirements and site conditions</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Primer/waterproofing/membrane compatibility has been checked where relevant</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+        <tr><td>Movement joints, slab joints and cracks have a planned treatment before adhesive install</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Adhesive Installation</span>
+      <span class="section-code">adhesive_installation</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Adhesive is suitable for external paving and selected paver/stone material</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Correct trowel size, bed thickness and coverage method used</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Adequate adhesive coverage achieved, including edge/corner support</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Large-format, dense, natural stone or uneven pieces are back-buttered where required</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+        <tr><td>Movement joints in the substrate are respected through the paving layer</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">always</span></td><td class="col-na"></td></tr>
+        <tr><td>Adhesive is not being used to hide poor levels, hollow areas or unsuitable substrate</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ───────────────── LAYING & MATERIAL ───────────────── -->
+<div class="group">
+  <div class="group-header">
+    <span class="group-title">Laying &amp; Material</span>
+    <span class="group-applies">Conditional — see each section</span>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Driveway Preparation</span>
+      <span class="section-code">driveway_preparation</span>
+    </div>
+    <div class="applies-note">When area use includes driveway_vehicle_traffic</div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Driveway paving build-up has been checked against vehicle loading and job specification</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Edge restraint, haunching or containment is suitable for vehicle movement</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Finished levels and transitions at crossover, garage, path, gate or road interface are acceptable</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Drainage and fall are suitable for a driveway area</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Paver/stone material and laying method are suitable for driveway use</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Set-Out &amp; First Section Laying</span>
+      <span class="section-code">setout_first_section</span>
+    </div>
+    <div class="applies-note">All non-stepper runs</div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Set-out, pattern direction and starting point checked before broad laying begins</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Borders, cuts, edges and transitions have been planned before laying continues</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>First section laid to confirm level, fall, joint width and visual alignment</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Paving surface is stable with no rocking pieces in the first section</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Supervisor accepts the first section before the crew continues broadly</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Variable Thickness / Natural Stone Review</span>
+      <span class="section-code">variable_thickness_stone_review</span>
+    </div>
+    <div class="applies-note">variable_thickness_natural_stone &bull; mixed_materials</div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Stone/pavers sorted for thickness, size, colour and visual variation before laying broadly</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Bedding/build-up approach manages variable thickness without creating trip hazards</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Finished surface variation is acceptable for the intended use</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>No piece rocks under foot or creates an obvious trip point</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Joint variation is intentional and visually acceptable before jointing</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Stepper Installation</span>
+      <span class="section-code">stepper_installation</span>
+    </div>
+    <div class="applies-note">steppers material &bull; stepping_path area use</div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Stepper spacing and walking rhythm are comfortable and consistent</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Each stepper is stable and does not rock or move under foot</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Finished height suits surrounding soil, gravel, lawn, mulch or planting</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Transitions between steppers and surrounding surfaces do not create trip hazards</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Drainage/fall around steppers will not undermine the bedding or surrounding surface</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Before Jointing</span>
+      <span class="section-code">before_jointing</span>
+    </div>
+    <div class="applies-note">All non-stepper runs</div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Paving surface is stable and ready for jointing</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Falls and drainage have been checked before jointing locks the surface in</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Cuts, borders, edges and transitions are acceptable before jointing</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Joints are clean, open and suitable for the selected jointing material</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Surface has been cleaned/prepared enough for jointing without trapping obvious residue</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Supervisor accepts the laid surface before jointing begins</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ───────────────── COMPLETION ───────────────── -->
+<div class="group">
+  <div class="group-header">
+    <span class="group-title">Completion</span>
+    <span class="group-applies">All runs</span>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <span class="section-title">Final Completion</span>
+      <span class="section-code">final_completion</span>
+    </div>
+    <table>
+      <thead><tr><th class="col-check">Check</th><th class="col-photo">Photo</th><th class="col-note">Note required</th><th class="col-na">N/A</th></tr></thead>
+      <tbody>
+        <tr><td>Finished paving surface is clean, stable and visually acceptable</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Joints are complete and suitable for the paving type and use case</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Drainage/fall has been checked after completion</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>No obvious ponding, trip hazards, loose pieces or unstable areas remain</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Edges, cuts, thresholds, drains, pits, coping, steps and transitions are complete and acceptable</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Surrounding property, walls, windows, doors, garden beds, lawns and access routes are clean and undamaged</td><td class="col-photo"><span class="tick">&#10003;</span></td><td></td><td class="col-na"></td></tr>
+        <tr><td>Waste, excess material and protection have been removed or left in place intentionally</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+        <tr><td>Final supervisor completion review has been completed</td><td class="col-photo"><span class="tick">&#10003;</span></td><td><span class="badge badge-warn">pass &amp; fail</span></td><td class="col-na"></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ───────────────── LEGEND ───────────────── -->
+<div class="legend">
+  <strong>Note required:</strong>
+  &nbsp;<span class="badge badge-warn">always</span> = note mandatory for every result (pass, fail, N/A) &nbsp;|&nbsp;
+  <span class="badge badge-warn">pass &amp; fail</span> = mandatory when pass or fail is selected &nbsp;|&nbsp;
+  <span class="badge">pass</span> = mandatory on pass only
+  &nbsp;&nbsp;&bull;&nbsp;&nbsp;
+  <strong>N/A column:</strong> &#10003; = crew can select N/A; no photo required when N/A is chosen
+  &nbsp;&nbsp;&bull;&nbsp;&nbsp;
+  <strong>Photo column:</strong> &#10003; = at least one photo required (unless N/A selected)
+</div>
+
+</body>
+</html>
