@@ -20,7 +20,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Job stage cards and QA section cards share the same tone colours */
+/* QA section cards on run overview pages */
 [data-qa-card-tone='active'] {
   background-color: #fef08a !important;
   border-color: #ca8a04 !important;
@@ -40,7 +40,40 @@ body {
 }
 
 [data-qa-card-tone='default'] {
-  background-color: #d1d5db !important;
-  border-color: #6b7280 !important;
+  background-color: #ffffff !important;
+  border-color: #d1d5db !important;
+}
+
+/* Job stage cards: red = not started, yellow = in progress, green = finished */
+[data-job-stage-tone='not_started'] {
+  background-color: #fecaca !important;
+  border-color: #ef4444 !important;
   border-left-width: 4px !important;
+  color: #991b1b !important;
+}
+
+[data-job-stage-tone='not_started'] .stage-card-muted {
+  color: #b91c1c !important;
+}
+
+[data-job-stage-tone='in_progress'] {
+  background-color: #fef9c3 !important;
+  border-color: #ca8a04 !important;
+  border-left-width: 4px !important;
+  color: #854d0e !important;
+}
+
+[data-job-stage-tone='in_progress'] .stage-card-muted {
+  color: #a16207 !important;
+}
+
+[data-job-stage-tone='finished'] {
+  background-color: #ecfccb !important;
+  border-color: #698f00 !important;
+  border-left-width: 4px !important;
+  color: #3f6212 !important;
+}
+
+[data-job-stage-tone='finished'] .stage-card-muted {
+  color: #4d7c0f !important;
 }

@@ -1166,7 +1166,11 @@ export default function JobDetailPage() {
               <p className="text-gray-600">No stages yet.</p>
             ) : (
               <ul className="space-y-3">
-                {stages.map((stage, stageIndex) => {
+                {(() => {
+                  const activeStageIndex = job?.active_stage_id
+                    ? stages.findIndex((stage) => stage.id === job.active_stage_id)
+                    : -1;
+                  return stages.map((stage, stageIndex) => {
                   const isActive = job?.active_stage_id === stage.id;
                   const isSetting = stageIdSettingActive === stage.id;
                   const isMoving = stageIdMoving === stage.id;
@@ -1178,36 +1182,23 @@ export default function JobDetailPage() {
                   const isIrrigationTemplate = templateNameLower.includes('irrigation');
                   const isFencingTemplate = templateNameLower.includes('fencing');
                   const hasQaTemplate = isPavingTemplate || isIrrigationTemplate || isFencingTemplate;
-                  const stageCardTone = resolveJobStageCardTone({
-                    stageId: stage.id,
-                    activeStageId: job?.active_stage_id ?? null,
-                    qaRuns,
-                    stageQaType: isPavingTemplate
-                      ? 'paving'
-                      : isIrrigationTemplate
-                        ? 'irrigation'
-                        : isFencingTemplate
-                          ? 'fencing'
-                          : !hasQaTemplate
-                            ? 'sign_off'
-                            : null,
-                  });
+                  const stageCardTone = resolveJobStageCardTone({ stageIndex, activeStageIndex });
                   return (
                     <li
                       key={stage.id}
-                      data-qa-card-tone={stageCardTone}
+                      data-job-stage-tone={stageCardTone}
                       className="p-4 rounded-lg shadow-sm border"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium text-gray-900">{stage.name}</span>
+                          <span className="font-medium stage-card-text">{stage.name}</span>
                           {stage.created_at && (
-                            <span className="text-sm text-gray-500">
+                            <span className="text-sm stage-card-muted">
                               {formatDate(stage.created_at)}
                             </span>
                           )}
                           {isActive && (
-                            <span className="text-xs font-medium text-[#698F00] bg-[#698F00]/20 px-2 py-0.5 rounded">
+                            <span className="text-xs font-medium px-2 py-0.5 rounded stage-card-muted bg-black/5">
                               Active
                             </span>
                           )}
@@ -1252,7 +1243,7 @@ export default function JobDetailPage() {
                       </div>
                       <div className="mt-3 space-y-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-sm text-gray-600">QA template:</span>
+                          <span className="text-sm stage-card-muted">QA template:</span>
                           <select
                             value={stage.checklist_template_id ?? ''}
                             onChange={(e) => {
@@ -1271,10 +1262,10 @@ export default function JobDetailPage() {
                             ))}
                           </select>
                           {isUpdatingTemplate && (
-                            <span className="text-xs text-gray-500">Saving…</span>
+                            <span className="text-xs stage-card-muted">Saving…</span>
                           )}
                         </div>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs stage-card-muted">
                           Choose the QA checklist template for this stage. This does not rename the stage.
                         </p>
                       </div>
@@ -1348,8 +1339,8 @@ export default function JobDetailPage() {
                                     (g) =>
                                       g.list.length > 0 && (
                                         <div key={g.key}>
-                                          <span className="font-medium text-gray-700">{g.label}:</span>
-                                          <ul className="mt-0.5 ml-3 list-disc text-gray-600">
+                                          <span className="font-medium stage-card-text">{g.label}:</span>
+                                          <ul className="mt-0.5 ml-3 list-disc stage-card-muted">
                                             {g.list.map((item, idx) => (
                                               <li key={idx}>{item.label}</li>
                                             ))}
@@ -1364,7 +1355,8 @@ export default function JobDetailPage() {
                         )}
                     </li>
                   );
-                })}
+                });
+                })()}
               </ul>
             )}
 
