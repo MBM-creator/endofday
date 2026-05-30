@@ -9,6 +9,7 @@ import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
 import { ccClientDisplayName, ccProjectPickerLabel } from '@/lib/cc-client-display';
 import { compressImageForUpload } from '@/lib/client-image-compression';
+import { resolveJobStageCardTone } from '@/lib/qa-section-card-style';
 
 interface Job {
   id: string;
@@ -68,6 +69,7 @@ interface JobBrief {
 
 interface QaRun {
   id: string;
+  stage_id?: string | null;
   status: string;
   qa_type?: string | null;
   setup_version: number | null;
@@ -1176,10 +1178,24 @@ export default function JobDetailPage() {
                   const isIrrigationTemplate = templateNameLower.includes('irrigation');
                   const isFencingTemplate = templateNameLower.includes('fencing');
                   const hasQaTemplate = isPavingTemplate || isIrrigationTemplate || isFencingTemplate;
+                  const stageCardTone = resolveJobStageCardTone({
+                    stageId: stage.id,
+                    activeStageId: job?.active_stage_id ?? null,
+                    qaRuns,
+                    stageQaType: isPavingTemplate
+                      ? 'paving'
+                      : isIrrigationTemplate
+                        ? 'irrigation'
+                        : isFencingTemplate
+                          ? 'fencing'
+                          : !hasQaTemplate
+                            ? 'sign_off'
+                            : null,
+                  });
                   return (
                     <li
                       key={stage.id}
-                      data-job-stage-tone={isActive ? 'active' : 'inactive'}
+                      data-qa-card-tone={stageCardTone}
                       className="p-4 rounded-lg shadow-sm border"
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">

@@ -53,3 +53,38 @@ export function findActiveQaSectionCode<T extends { cleared: boolean }>(
   const first = sections.find((section) => !section.cleared);
   return first ? getCode(first) : null;
 }
+
+export function resolveJobStageCardTone(input: {
+  stageId: string;
+  activeStageId: string | null;
+  qaRuns: { stage_id?: string | null; status: string; qa_type?: string | null }[];
+  stageQaType?: 'paving' | 'irrigation' | 'fencing' | 'sign_off' | null;
+}): QaSectionCardTone {
+  const stageRuns = input.qaRuns.filter((run) => {
+    if (run.stage_id === input.stageId) return true;
+    if (run.stage_id != null || !input.stageQaType) return false;
+    const runType =
+      run.qa_type === 'irrigation'
+        ? 'irrigation'
+        : run.qa_type === 'fencing'
+          ? 'fencing'
+          : run.qa_type === 'sign_off'
+            ? 'sign_off'
+            : 'paving';
+    return runType === input.stageQaType;
+  });
+
+  if (stageRuns.some((run) => run.status === 'completed')) {
+    return 'signed_off';
+  }
+
+  if (input.activeStageId === input.stageId) {
+    return 'active';
+  }
+
+  if (stageRuns.some((run) => run.status === 'active')) {
+    return 'activated';
+  }
+
+  return 'default';
+}

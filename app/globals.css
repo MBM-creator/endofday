@@ -20,38 +20,27 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
-/* Job stage cards on the job detail page */
-[data-job-stage-tone="active"] {
-  background-color: rgba(105, 143, 0, 0.2);
-  border-color: #698f00;
-  border-left-width: 4px;
+/* Job stage cards and QA section cards share the same tone colours */
+[data-qa-card-tone='active'] {
+  background-color: #fef08a !important;
+  border-color: #ca8a04 !important;
+  border-left-width: 4px !important;
 }
 
-[data-job-stage-tone="inactive"] {
-  background-color: #e5e7eb;
-  border-color: #9ca3af;
+[data-qa-card-tone='activated'] {
+  background-color: #fecaca !important;
+  border-color: #ef4444 !important;
+  border-left-width: 4px !important;
 }
 
-/* QA section cards on run overview pages */
-[data-qa-card-tone="active"] {
-  background-color: #fef08a;
-  border-color: #ca8a04;
-  border-left-width: 4px;
+[data-qa-card-tone='signed_off'] {
+  background-color: rgba(105, 143, 0, 0.25) !important;
+  border-color: #698f00 !important;
+  border-left-width: 4px !important;
 }
 
-[data-qa-card-tone="activated"] {
-  background-color: #fecaca;
-  border-color: #ef4444;
-  border-left-width: 4px;
-}
-
-[data-qa-card-tone="signed_off"] {
-  background-color: rgba(105, 143, 0, 0.2);
-  border-color: #698f00;
-  border-left-width: 4px;
-}
-
-[data-qa-card-tone="default"] {
-  background-color: #ffffff;
-  border-color: #d1d5db;
+[data-qa-card-tone='default'] {
+  background-color: #d1d5db !important;
+  border-color: #6b7280 !important;
+  border-left-width: 4px !important;
 }
