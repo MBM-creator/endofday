@@ -370,32 +370,30 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
       'Surface prepared and adhesive installed where applicable; set-out, pattern direction and first section confirmed before broad laying continues.',
     items: [
       item('surface_clean', 'Surface cleaned of dust, dirt, oil, loose material, paint, sealer, laitance or contaminants', {
+        criticalOnFail: true,
+        whenInstallMethods: GLUE_INSTALL_METHODS,
+      }),
+      item('primer_compatibility', 'Primer applied?', {
         requirePhoto: true,
         criticalOnFail: true,
         whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
-      item('surface_dry', 'Surface is dry/suitable enough for adhesive according to product requirements and site conditions', {
+      item('setout_plan', 'Set-out, pattern direction, transitions and starting point confirmed before any laying commences', {
         requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
-        whenInstallMethods: GLUE_INSTALL_METHODS,
-      }),
-      item('primer_compatibility', 'Primer/waterproofing/membrane compatibility has been checked where relevant', {
-        requirePhoto: true,
-        criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail', 'not_required'],
-        notePrompt: 'Record product/system compatibility, or why not required.',
-        whenInstallMethods: GLUE_INSTALL_METHODS,
+        notePrompt: 'Record pattern direction, starting point and any visual alignment decisions.',
+        whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
       item('joint_treatment_planned', 'Control joints, slab joints and cracks have a planned treatment before adhesive install', {
         requirePhoto: true,
         criticalOnFail: true,
+        allowNa: true,
         noteRequiredWhen: ['pass', 'fail', 'not_required'],
         notePrompt: 'Record how joints/cracks will be treated or carried through.',
         whenInstallMethods: GLUE_INSTALL_METHODS,
       }),
       item('adhesive_coverage', 'Correct trowel size, bed thickness and coverage method used', {
-        requirePhoto: true,
         criticalOnFail: true,
         noteRequiredWhen: ['pass', 'fail'],
         whenInstallMethods: GLUE_INSTALL_METHODS,
@@ -403,6 +401,7 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
       item('back_butter', 'Large-format, dense, natural stone or uneven pieces are back-buttered where required', {
         requirePhoto: true,
         criticalOnFail: true,
+        allowNa: true,
         noteRequiredWhen: ['pass', 'fail', 'not_required'],
         notePrompt: 'Record whether back-buttering was used or why it was not required.',
         whenInstallMethods: GLUE_INSTALL_METHODS,
@@ -410,20 +409,9 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
       item('movement_joints_respected', 'Movement joints in the substrate are respected through the paving layer', {
         requirePhoto: true,
         criticalOnFail: true,
+        allowNa: true,
         noteRequiredWhen: ['pass', 'fail', 'not_required'],
         whenInstallMethods: GLUE_INSTALL_METHODS,
-      }),
-      item('substrate_genuine', 'Adhesive is not being used to hide poor levels, hollow areas or unsuitable substrate', {
-        requirePhoto: true,
-        criticalOnFail: true,
-        whenInstallMethods: GLUE_INSTALL_METHODS,
-      }),
-      item('setout_plan', 'Set-out, pattern direction and starting point checked before broad laying begins', {
-        requirePhoto: true,
-        criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail'],
-        notePrompt: 'Record pattern direction, starting point and any visual alignment decisions.',
-        whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
       item('borders_planned', 'Borders, cuts, edges and transitions have been planned before laying continues', {
         criticalOnFail: true,
@@ -438,12 +426,6 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
       }),
       item('first_section_stable', 'Paving surface is stable with no rocking pieces in the first section', {
         criticalOnFail: true,
-        whenMaterialTypes: NON_STEPPER_MATERIALS,
-      }),
-      item('first_section_approved', 'Supervisor accepts the first section before the crew continues broadly', {
-        criticalOnFail: true,
-        noteRequiredWhen: ['pass', 'fail'],
-        notePrompt: 'Record who checked the first section and any conditions before continuing.',
         whenMaterialTypes: NON_STEPPER_MATERIALS,
       }),
     ],
