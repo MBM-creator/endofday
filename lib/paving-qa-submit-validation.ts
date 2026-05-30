@@ -55,6 +55,10 @@ export function validateCrewSectionPayloadV2(
 
   for (const item of items) {
     if (item.photoOnly) {
+      const result = (answers[item.key]?.result ?? '').trim();
+      if (item.allowNa && result === 'not_required') {
+        continue;
+      }
       if (item.requirePhoto) {
         const n = photoCountByItem[item.key] ?? 0;
         if (n < 1) {

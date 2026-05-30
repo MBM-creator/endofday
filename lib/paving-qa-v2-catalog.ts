@@ -134,6 +134,7 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
       item('services_protected', 'Services have been identified and protected', {
         requirePhoto: true,
         photoOnly: true,
+        allowNa: true,
       }),
     ],
   },
@@ -175,9 +176,6 @@ const ALL_SECTIONS: V2CatalogueSection[] = [
         criticalOnFail: true,
       }),
       item('thresholds_checked', 'Critical thresholds, doors, weep holes, pool coping, retaining walls and fixed edges have been checked', {
-        criticalOnFail: true,
-      }),
-      item('fall_method_checked', 'Fall/discharge point has been checked using string line, laser, level or other reliable method', {
         criticalOnFail: true,
       }),
     ],

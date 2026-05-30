@@ -1,6 +1,9 @@
 const MAX_IMAGE_DIMENSION = 1800;
 const JPEG_QUALITY = 0.82;
-const TARGET_MAX_BYTES = 3 * 1024 * 1024;
+/** Keep each photo small enough that several can fit in one Vercel request (~4.5 MB cap). */
+const TARGET_MAX_BYTES = 900 * 1024;
+/** Total multipart body budget for QA section submits (answers JSON + photos). */
+export const QA_UPLOAD_MAX_TOTAL_BYTES = 4 * 1024 * 1024;
 
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -29,6 +32,14 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
       quality
     );
   });
+}
+
+export async function compressImagesForUpload(files: File[]): Promise<File[]> {
+  return Promise.all(files.map((file) => compressImageForUpload(file)));
+}
+
+export function estimateUploadPayloadBytes(answersJson: string, files: File[]): number {
+  return answersJson.length + files.reduce((sum, file) => sum + file.size, 0);
 }
 
 export async function compressImageForUpload(file: File): Promise<File> {

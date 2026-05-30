@@ -12,6 +12,12 @@ import type { PavingQaSetup, PavingSectionCode } from '@/lib/paving-qa-v1-types'
 import { getV2SectionDefinition, isV2SectionCode, type PavingSectionCodeV2 } from '@/lib/paving-qa-v2-catalog';
 import type { V2CatalogueItem } from '@/lib/paving-qa-v2-catalog';
 import type { V2SectionUiState } from '@/lib/paving-qa-v2-graph';
+import {
+  compressImageForUpload,
+  compressImagesForUpload,
+  estimateUploadPayloadBytes,
+  QA_UPLOAD_MAX_TOTAL_BYTES,
+} from '@/lib/client-image-compression';
 
 type Answers = Record<string, { result: string; note: string }>;
 
@@ -165,16 +171,21 @@ function V1SectionPage({
     if (isReadOnly) return;
     setAnswers((prev) => ({ ...prev, [key]: { result: prev[key]?.result ?? '', note } }));
   }
-  function addFiles(key: string, files: FileList | null) {
+  async function addFiles(key: string, files: FileList | null) {
     if (isReadOnly || !files?.length) return;
-    const newFiles = Array.from(files);
-    const newPreviews = newFiles.map((f) => {
-      const url = URL.createObjectURL(f);
-      createdUrlsRef.current.push(url);
-      return url;
-    });
-    setPhotoFiles((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newFiles] }));
-    setPhotoPreviews((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newPreviews] }));
+    setError(null);
+    try {
+      const newFiles = await compressImagesForUpload(Array.from(files));
+      const newPreviews = newFiles.map((f) => {
+        const url = URL.createObjectURL(f);
+        createdUrlsRef.current.push(url);
+        return url;
+      });
+      setPhotoFiles((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newFiles] }));
+      setPhotoPreviews((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newPreviews] }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to prepare photo');
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -191,15 +202,29 @@ function V1SectionPage({
     setError(null);
     setSaved(false);
     try {
+      const answersJson = JSON.stringify(answers);
       const fd = new FormData();
-      fd.set('answers', JSON.stringify(answers));
+      fd.set('answers', answersJson);
+      const uploadFiles: File[] = [];
       for (const [itemKey, files] of Object.entries(photoFiles)) {
-        for (const file of files) fd.append(`item_${itemKey}`, file);
+        for (const file of files) {
+          const uploadFile = await compressImageForUpload(file);
+          uploadFiles.push(uploadFile);
+          fd.append(`item_${itemKey}`, uploadFile);
+        }
+      }
+      if (estimateUploadPayloadBytes(answersJson, uploadFiles) > QA_UPLOAD_MAX_TOTAL_BYTES) {
+        setError('Photos are too large to upload together. Remove a photo or retake at lower resolution.');
+        return;
       }
       const res = await fetch(
         `/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`,
         { method: 'POST', body: fd }
       );
+      if (res.status === 413) {
+        setError('Photos are too large to upload. Remove a photo or retake at lower resolution.');
+        return;
+      }
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         setError(
@@ -410,16 +435,21 @@ function V2SectionPage({
     if (!canSubmit) return;
     setAnswers((prev) => ({ ...prev, [key]: { result: prev[key]?.result ?? '', note } }));
   }
-  function addFiles(key: string, files: FileList | null) {
+  async function addFiles(key: string, files: FileList | null) {
     if (!canSubmit || !files?.length) return;
-    const newFiles = Array.from(files);
-    const newPreviews = newFiles.map((f) => {
-      const url = URL.createObjectURL(f);
-      createdUrlsRef.current.push(url);
-      return url;
-    });
-    setPhotoFiles((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newFiles] }));
-    setPhotoPreviews((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newPreviews] }));
+    setError(null);
+    try {
+      const newFiles = await compressImagesForUpload(Array.from(files));
+      const newPreviews = newFiles.map((f) => {
+        const url = URL.createObjectURL(f);
+        createdUrlsRef.current.push(url);
+        return url;
+      });
+      setPhotoFiles((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newFiles] }));
+      setPhotoPreviews((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...newPreviews] }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to prepare photo');
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -429,15 +459,29 @@ function V2SectionPage({
     setError(null);
     setSaved(false);
     try {
+      const answersJson = JSON.stringify(answers);
       const fd = new FormData();
-      fd.set('answers', JSON.stringify(answers));
+      fd.set('answers', answersJson);
+      const uploadFiles: File[] = [];
       for (const [itemKey, files] of Object.entries(photoFiles)) {
-        for (const file of files) fd.append(`item_${itemKey}`, file);
+        for (const file of files) {
+          const uploadFile = await compressImageForUpload(file);
+          uploadFiles.push(uploadFile);
+          fd.append(`item_${itemKey}`, uploadFile);
+        }
+      }
+      if (estimateUploadPayloadBytes(answersJson, uploadFiles) > QA_UPLOAD_MAX_TOTAL_BYTES) {
+        setError('Photos are too large to upload together. Remove a photo or retake at lower resolution.');
+        return;
       }
       const res = await fetch(
         `/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`,
         { method: 'POST', body: fd }
       );
+      if (res.status === 413) {
+        setError('Photos are too large to upload. Remove a photo or retake at lower resolution.');
+        return;
+      }
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         const specificErrors = Array.isArray(data?.errors) && data.errors.length > 0
@@ -578,6 +622,20 @@ function V2SectionPage({
                         <span>{r === 'not_required' ? 'N/A' : r.charAt(0).toUpperCase() + r.slice(1)}</span>
                       </label>
                     ))}
+                  {item.photoOnly && item.allowNa && (
+                    <label className="flex items-center gap-1.5 text-sm cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={result === 'not_required'}
+                        disabled={!canSubmit}
+                        onChange={(e) =>
+                          setResult(item.key, e.target.checked ? 'not_required' : '')
+                        }
+                        className="accent-[#698F00]"
+                      />
+                      <span>N/A</span>
+                    </label>
+                  )}
                 </div>
 
                 {/* Note field: always shown on fail; also shown when noteRequiredWhen matches

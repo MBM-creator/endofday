@@ -5,6 +5,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getFencingSectionDefinition, isFencingSectionCode, type FencingCatalogueItem, type FencingSectionCode } from '@/lib/fencing-qa-v1-catalog';
 import type { FencingSectionUiState } from '@/lib/fencing-qa-v1-graph';
+import {
+  compressImageForUpload,
+  compressImagesForUpload,
+  estimateUploadPayloadBytes,
+  QA_UPLOAD_MAX_TOTAL_BYTES,
+} from '@/lib/client-image-compression';
 
 type Answers = Record<string, { result: string; note: string }>;
 type PhotoRow = { id: string; item_key: string; content_type: string; created_at: string | null; signed_url: string | null };
@@ -191,16 +197,21 @@ export default function FencingQaSectionPage() {
     setAnswers((prev) => ({ ...prev, [key]: { result: prev[key]?.result ?? '', note } }));
   }
 
-  function addFiles(key: string, files: FileList | null) {
+  async function addFiles(key: string, files: FileList | null) {
     if (!canSubmit || !files?.length) return;
-    const nextFiles = Array.from(files);
-    const previews = nextFiles.map((file) => {
-      const url = URL.createObjectURL(file);
-      createdUrlsRef.current.push(url);
-      return url;
-    });
-    setPhotoFiles((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...nextFiles] }));
-    setPhotoPreviews((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...previews] }));
+    setError(null);
+    try {
+      const nextFiles = await compressImagesForUpload(Array.from(files));
+      const previews = nextFiles.map((file) => {
+        const url = URL.createObjectURL(file);
+        createdUrlsRef.current.push(url);
+        return url;
+      });
+      setPhotoFiles((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...nextFiles] }));
+      setPhotoPreviews((prev) => ({ ...prev, [key]: [...(prev[key] ?? []), ...previews] }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to prepare photo');
+    }
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -210,12 +221,26 @@ export default function FencingQaSectionPage() {
     setError(null);
     setSaved(false);
     try {
+      const answersJson = JSON.stringify(answers);
       const fd = new FormData();
-      fd.set('answers', JSON.stringify(answers));
+      fd.set('answers', answersJson);
+      const uploadFiles: File[] = [];
       for (const [itemKey, files] of Object.entries(photoFiles)) {
-        for (const file of files) fd.append(`item_${itemKey}`, file);
+        for (const file of files) {
+          const uploadFile = await compressImageForUpload(file);
+          uploadFiles.push(uploadFile);
+          fd.append(`item_${itemKey}`, uploadFile);
+        }
+      }
+      if (estimateUploadPayloadBytes(answersJson, uploadFiles) > QA_UPLOAD_MAX_TOTAL_BYTES) {
+        setError('Photos are too large to upload together. Remove a photo or retake at lower resolution.');
+        return;
       }
       const res = await fetch(`/api/jobs/${jobId}/qa/runs/${runId}/sections/${encodeURIComponent(sectionCode)}/submit?orgSlug=${encodeURIComponent(orgSlug)}`, { method: 'POST', body: fd });
+      if (res.status === 413) {
+        setError('Photos are too large to upload. Remove a photo or retake at lower resolution.');
+        return;
+      }
       const data = await res.json();
       if (!res.ok || !data?.ok) {
         const specific = Array.isArray(data?.errors) ? data.errors.join('\n') : null;

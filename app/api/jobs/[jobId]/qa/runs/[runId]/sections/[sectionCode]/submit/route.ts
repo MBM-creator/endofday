@@ -504,10 +504,18 @@ async function handleV2Submit(
   // Validate payload against v2 items — photo-only items need photos, not pass/fail
   for (const item of sectionDef.items) {
     if (item.photoOnly) {
-      answers[item.key] = {
-        result: 'pass',
-        note: (answers[item.key]?.note ?? '').trim(),
-      };
+      const current = (answers[item.key]?.result ?? '').trim();
+      if (item.allowNa && current === 'not_required') {
+        answers[item.key] = {
+          result: 'not_required',
+          note: (answers[item.key]?.note ?? '').trim(),
+        };
+      } else {
+        answers[item.key] = {
+          result: 'pass',
+          note: (answers[item.key]?.note ?? '').trim(),
+        };
+      }
     }
   }
 

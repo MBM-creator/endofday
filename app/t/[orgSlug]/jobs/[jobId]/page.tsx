@@ -8,6 +8,7 @@ import { ClientConnectVariationsSummary } from '@/components/ClientConnectVariat
 import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
 import { ccClientDisplayName } from '@/lib/cc-client-display';
+import { compressImageForUpload } from '@/lib/client-image-compression';
 
 interface Job {
   id: string;
@@ -685,12 +686,17 @@ export default function JobDetailPage() {
       for (const file of toUpload) {
         if (!(file instanceof File) || file.size === 0) continue;
         const formData = new FormData();
-        formData.append('file', file);
         try {
+          const uploadFile = await compressImageForUpload(file);
+          formData.append('file', uploadFile);
           const res = await fetch(`/api/jobs/${job?.id ?? jobId}/photos?orgSlug=${encodeURIComponent(orgSlug)}`, {
             method: 'POST',
             body: formData,
           });
+          if (res.status === 413) {
+            lastError = 'Photo is too large to upload. Retake at lower resolution or choose a smaller image.';
+            continue;
+          }
           const data = await res.json();
           if (res.ok && data?.ok) {
             await refetchPhotos();
