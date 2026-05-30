@@ -212,6 +212,7 @@ export default function JobDetailPage() {
   const [stageIdUpdatingTemplate, setStageIdUpdatingTemplate] = useState<string | null>(null);
   const [templateUpdateError, setTemplateUpdateError] = useState<string | null>(null);
   const [qaRuns, setQaRuns] = useState<QaRun[]>([]);
+  const [qaRunIncompleteById, setQaRunIncompleteById] = useState<Record<string, boolean>>({});
   const [qaRunsError, setQaRunsError] = useState<string | null>(null);
 
   const [ccProjects, setCcProjects] = useState<CcProject[]>([]);
@@ -440,25 +441,43 @@ export default function JobDetailPage() {
   useEffect(() => {
     if (!job?.id || !orgSlug) {
       setQaRuns([]);
+      setQaRunIncompleteById({});
       setQaRunsError(null);
       return;
     }
     let cancelled = false;
     setQaRunsError(null);
-    fetch(`/api/jobs/${job.id}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`)
-      .then((res) => res.json().then((data) => ({ res, data })))
-      .then(({ res, data }: { res: Response; data: { ok?: boolean; runs?: QaRun[]; message?: string } }) => {
+    Promise.all([
+      fetch(`/api/jobs/${job.id}/qa/runs?orgSlug=${encodeURIComponent(orgSlug)}`).then((res) =>
+        res.json().then((data) => ({ res, data }))
+      ),
+      fetch(`/api/jobs/${job.id}/qa/summary?orgSlug=${encodeURIComponent(orgSlug)}`).then((res) =>
+        res.json().then((data) => ({ res, data }))
+      ),
+    ])
+      .then(([runsResult, summaryResult]) => {
         if (cancelled) return;
+        const { res, data } = runsResult;
         if (!res.ok || !data?.ok || !Array.isArray(data.runs)) {
           setQaRuns([]);
+          setQaRunIncompleteById({});
           setQaRunsError(typeof data?.message === 'string' ? data.message : 'QA status unavailable');
           return;
         }
         setQaRuns(data.runs);
+
+        const incompleteById: Record<string, boolean> = {};
+        if (summaryResult.res.ok && summaryResult.data?.ok && Array.isArray(summaryResult.data.activeRuns)) {
+          for (const run of summaryResult.data.activeRuns as { id: string; incompleteEvidence?: boolean }[]) {
+            incompleteById[run.id] = run.incompleteEvidence !== false;
+          }
+        }
+        setQaRunIncompleteById(incompleteById);
       })
       .catch(() => {
         if (!cancelled) {
           setQaRuns([]);
+          setQaRunIncompleteById({});
           setQaRunsError('QA status unavailable');
         }
       });
@@ -1182,7 +1201,22 @@ export default function JobDetailPage() {
                   const isIrrigationTemplate = templateNameLower.includes('irrigation');
                   const isFencingTemplate = templateNameLower.includes('fencing');
                   const hasQaTemplate = isPavingTemplate || isIrrigationTemplate || isFencingTemplate;
-                  const stageCardTone = resolveJobStageCardTone({ stageIndex, activeStageIndex });
+                  const stageCardTone = resolveJobStageCardTone({
+                    stageIndex,
+                    activeStageIndex,
+                    stageId: stage.id,
+                    stageQaType: isPavingTemplate
+                      ? 'paving'
+                      : isIrrigationTemplate
+                        ? 'irrigation'
+                        : isFencingTemplate
+                          ? 'fencing'
+                          : !hasQaTemplate
+                            ? 'sign_off'
+                            : null,
+                    qaRuns,
+                    qaRunIncompleteById,
+                  });
                   return (
                     <li
                       key={stage.id}

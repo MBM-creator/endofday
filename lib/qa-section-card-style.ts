@@ -45,19 +45,48 @@ export function findActiveQaSectionCode<T extends { cleared: boolean }>(
   return first ? getCode(first) : null;
 }
 
-/** Job stage progress by order relative to the active stage. */
+/** Job stage card tone from QA completion and active stage. */
 export function resolveJobStageCardTone(input: {
   stageIndex: number;
   activeStageIndex: number;
+  stageId: string;
+  stageQaType?: 'paving' | 'irrigation' | 'fencing' | 'sign_off' | null;
+  qaRuns: { id: string; stage_id?: string | null; status: string; qa_type?: string | null }[];
+  qaRunIncompleteById: Record<string, boolean>;
 }): JobStageCardTone {
-  if (input.activeStageIndex < 0) {
-    return 'not_started';
-  }
-  if (input.stageIndex < input.activeStageIndex) {
-    return 'finished';
-  }
-  if (input.stageIndex === input.activeStageIndex) {
+  const linkedRuns = input.qaRuns.filter((run) => {
+    if (run.stage_id === input.stageId) return true;
+    if (run.stage_id != null || !input.stageQaType) return false;
+    const runType =
+      run.qa_type === 'irrigation'
+        ? 'irrigation'
+        : run.qa_type === 'fencing'
+          ? 'fencing'
+          : run.qa_type === 'sign_off'
+            ? 'sign_off'
+            : 'paving';
+    return runType === input.stageQaType;
+  });
+
+  const hasFinishedQa = linkedRuns.some(
+    (run) =>
+      run.status === 'completed' ||
+      (run.status === 'active' && input.qaRunIncompleteById[run.id] === false)
+  );
+  if (hasFinishedQa) return 'finished';
+
+  if (input.activeStageIndex >= 0 && input.stageIndex === input.activeStageIndex) {
     return 'in_progress';
   }
+
+  const hasActiveIncompleteQa = linkedRuns.some(
+    (run) => run.status === 'active' && input.qaRunIncompleteById[run.id] !== false
+  );
+  if (hasActiveIncompleteQa) return 'in_progress';
+
+  if (input.activeStageIndex >= 0 && input.stageIndex < input.activeStageIndex) {
+    return 'finished';
+  }
+
   return 'not_started';
 }
