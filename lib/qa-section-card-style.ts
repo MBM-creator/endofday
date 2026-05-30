@@ -1,16 +1,14 @@
 export type QaSectionCardTone = 'signed_off' | 'activated' | 'active' | 'default';
 
+const QA_SECTION_CARD_TONE_CLASS: Record<QaSectionCardTone, string> = {
+  signed_off: 'bg-[#698F00]/10 border-[#698F00]',
+  activated: 'bg-red-100 border-red-400',
+  active: 'bg-yellow-100 border-yellow-400',
+  default: 'bg-white border-gray-200',
+};
+
 export function getQaSectionCardClass(tone: QaSectionCardTone): string {
-  switch (tone) {
-    case 'signed_off':
-      return 'bg-[#698F00]/10 border-[#698F00]';
-    case 'activated':
-      return 'bg-red-50 border-red-200';
-    case 'active':
-      return 'bg-yellow-50 border-yellow-200';
-    default:
-      return 'bg-white border-gray-200';
-  }
+  return QA_SECTION_CARD_TONE_CLASS[tone];
 }
 
 export function resolveQaSectionCardTone(input: {
@@ -19,8 +17,9 @@ export function resolveQaSectionCardTone(input: {
   isActiveStep: boolean;
 }): QaSectionCardTone {
   if (input.cleared) return 'signed_off';
-  if (input.activated) return 'activated';
+  // Current step stays yellow until signed off; red is for earlier steps still in progress.
   if (input.isActiveStep) return 'active';
+  if (input.activated) return 'activated';
   return 'default';
 }
 
