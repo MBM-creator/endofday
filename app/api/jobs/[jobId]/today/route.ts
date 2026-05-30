@@ -6,6 +6,7 @@ import { activeRunHasIncompleteEvidence } from '@/lib/paving-qa-v1-graph';
 import { v2RunHasIncompleteEvidence } from '@/lib/paving-qa-v2-graph';
 import { irrigationRunHasIncompleteEvidence } from '@/lib/irrigation-qa-v1-graph';
 import { fencingRunHasIncompleteEvidence } from '@/lib/fencing-qa-v1-graph';
+import { signoffRunHasIncompleteEvidence } from '@/lib/signoff-qa-v1-graph';
 import { loadCcProjectForJob } from '@/lib/cc-project-context';
 import { randomUUID } from 'crypto';
 
@@ -318,7 +319,17 @@ export async function GET(
         );
         warningMessage =
           'Fencing QA evidence is incomplete. Review the fencing QA run before completing today\'s report.';
-      } else if (bundle.ok && bundle.version === 1) {
+      } else if (bundle.ok && bundle.qaType === 'sign_off') {
+        qaType = 'sign_off';
+        hasIncomplete = signoffRunHasIncompleteEvidence(
+          bundle.setup,
+          bundle.submissions,
+          bundle.photoRows,
+          bundle.issues
+        );
+        warningMessage =
+          'Supervisor sign-off evidence is incomplete. Review the sign-off run before completing today\'s report.';
+      } else if (bundle.ok && bundle.qaType === 'paving' && bundle.version === 1) {
         hasIncomplete = activeRunHasIncompleteEvidence(
           bundle.setup,
           bundle.submissions,
@@ -327,7 +338,7 @@ export async function GET(
         );
         warningMessage =
           'An active paving QA run still has incomplete required evidence. You can submit end of day, but finish QA when possible.';
-      } else if (bundle.ok && bundle.version === 2) {
+      } else if (bundle.ok && bundle.qaType === 'paving' && bundle.version === 2) {
         hasIncomplete = v2RunHasIncompleteEvidence(
           bundle.setup,
           bundle.submissions,
