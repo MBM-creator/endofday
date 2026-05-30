@@ -1,3 +1,5 @@
+import type { CSSProperties } from 'react';
+
 export type QaSectionCardTone = 'signed_off' | 'activated' | 'active' | 'default';
 
 const QA_SECTION_CARD_TONE_CLASS: Record<QaSectionCardTone, string> = {
@@ -7,8 +9,29 @@ const QA_SECTION_CARD_TONE_CLASS: Record<QaSectionCardTone, string> = {
   default: 'bg-white border-gray-200',
 };
 
+const QA_SECTION_CARD_TONE_STYLE: Record<QaSectionCardTone, CSSProperties> = {
+  signed_off: { backgroundColor: 'rgba(105, 143, 0, 0.12)', borderColor: '#698F00' },
+  activated: { backgroundColor: '#fee2e2', borderColor: '#f87171' },
+  active: { backgroundColor: '#fef9c3', borderColor: '#facc15' },
+  default: { backgroundColor: '#ffffff', borderColor: '#e5e7eb' },
+};
+
+export const JOB_STAGE_ACTIVE_STYLE: CSSProperties = {
+  backgroundColor: 'rgba(105, 143, 0, 0.12)',
+  borderColor: '#698F00',
+};
+
+export const JOB_STAGE_INACTIVE_STYLE: CSSProperties = {
+  backgroundColor: '#f3f4f6',
+  borderColor: '#d1d5db',
+};
+
 export function getQaSectionCardClass(tone: QaSectionCardTone): string {
   return QA_SECTION_CARD_TONE_CLASS[tone];
+}
+
+export function getQaSectionCardStyle(tone: QaSectionCardTone): CSSProperties {
+  return QA_SECTION_CARD_TONE_STYLE[tone];
 }
 
 export function resolveQaSectionCardTone(input: {

@@ -8,9 +8,9 @@ import type { SignoffQaSetupV1 } from '@/lib/signoff-qa-v1-types';
 import type { SignoffSectionUiState } from '@/lib/signoff-qa-v1-graph';
 import {
   findActiveQaSectionCode,
-  getQaSectionCardClass,
   resolveQaSectionCardTone,
 } from '@/lib/qa-section-card-style';
+import { QaSectionCard } from '@/components/QaSectionCard';
 
 interface JobContext {
   cc_project_id?: string | null;
@@ -127,7 +127,7 @@ export default function SignOffQaRunOverviewPage() {
                     isActiveStep: section.code === activeSectionCode,
                   });
                   return (
-                    <li key={section.code} className={`border rounded-lg p-4 shadow-sm ${getQaSectionCardClass(cardTone)}`}>
+                    <QaSectionCard key={section.code} tone={cardTone}>
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-start gap-3 min-w-0">
                           <span className="mt-0.5 flex-none w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs font-medium flex items-center justify-center">{index + 1}</span>
@@ -146,7 +146,7 @@ export default function SignOffQaRunOverviewPage() {
                       <Link href={`/t/${orgSlug}/jobs/${jobId}/qa/sign-off/${runId}/${encodeURIComponent(section.code)}`} className="mt-3 inline-block text-xs text-[#698F00] font-medium hover:underline pl-9">
                         Open section →
                       </Link>
-                    </li>
+                    </QaSectionCard>
                   );
                 })}
               </ul>

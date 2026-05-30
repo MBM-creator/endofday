@@ -16,9 +16,9 @@ import type { V2SectionUiState } from '@/lib/paving-qa-v2-graph';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import {
   findActiveQaSectionCode,
-  getQaSectionCardClass,
   resolveQaSectionCardTone,
 } from '@/lib/qa-section-card-style';
+import { QaSectionCard } from '@/components/QaSectionCard';
 
 interface SectionState {
   section: PavingSectionCode;
@@ -150,10 +150,7 @@ export default function PavingQaRunOverviewPage() {
                   isActiveStep: s.section === activeSectionCode,
                 });
                 return (
-                  <li
-                    key={s.section}
-                    className={`border rounded-lg p-4 shadow-sm ${getQaSectionCardClass(cardTone)}`}
-                  >
+                  <QaSectionCard key={s.section} tone={cardTone}>
                     <div className="flex flex-wrap justify-between gap-2">
                       <span className="font-medium text-gray-900">{title}</span>
                       <div className="flex flex-wrap gap-2 text-xs">
@@ -188,7 +185,7 @@ export default function PavingQaRunOverviewPage() {
                     >
                       Open section →
                     </Link>
-                  </li>
+                  </QaSectionCard>
                 );
               });
               })()}
@@ -309,10 +306,7 @@ function V2RunOverview({
               isActiveStep: s.code === activeSectionCode,
             });
             return (
-              <li
-                key={s.code}
-                className={`border rounded-lg p-4 shadow-sm ${getQaSectionCardClass(cardTone)}`}
-              >
+              <QaSectionCard key={s.code} tone={cardTone}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3 min-w-0">
                     <span className="mt-0.5 flex-none w-6 h-6 rounded-full bg-gray-100 text-gray-500 text-xs font-medium flex items-center justify-center">
@@ -359,7 +353,7 @@ function V2RunOverview({
                 >
                   {s.status === 'blocked' ? 'View blocking reasons →' : 'Open section →'}
                 </Link>
-              </li>
+              </QaSectionCard>
             );
           })}
         </ul>
