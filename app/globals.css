@@ -19,3 +19,39 @@ body {
   color: #000000;
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Job stage cards on the job detail page */
+[data-job-stage-tone="active"] {
+  background-color: rgba(105, 143, 0, 0.2);
+  border-color: #698f00;
+  border-left-width: 4px;
+}
+
+[data-job-stage-tone="inactive"] {
+  background-color: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+/* QA section cards on run overview pages */
+[data-qa-card-tone="active"] {
+  background-color: #fef08a;
+  border-color: #ca8a04;
+  border-left-width: 4px;
+}
+
+[data-qa-card-tone="activated"] {
+  background-color: #fecaca;
+  border-color: #ef4444;
+  border-left-width: 4px;
+}
+
+[data-qa-card-tone="signed_off"] {
+  background-color: rgba(105, 143, 0, 0.2);
+  border-color: #698f00;
+  border-left-width: 4px;
+}
+
+[data-qa-card-tone="default"] {
+  background-color: #ffffff;
+  border-color: #d1d5db;
+}

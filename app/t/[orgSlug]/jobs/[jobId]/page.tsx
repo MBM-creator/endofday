@@ -9,7 +9,6 @@ import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
 import { ccClientDisplayName, ccProjectPickerLabel } from '@/lib/cc-client-display';
 import { compressImageForUpload } from '@/lib/client-image-compression';
-import { JOB_STAGE_ACTIVE_STYLE, JOB_STAGE_INACTIVE_STYLE } from '@/lib/qa-section-card-style';
 
 interface Job {
   id: string;
@@ -1180,8 +1179,8 @@ export default function JobDetailPage() {
                   return (
                     <li
                       key={stage.id}
+                      data-job-stage-tone={isActive ? 'active' : 'inactive'}
                       className="p-4 rounded-lg shadow-sm border"
-                      style={isActive ? JOB_STAGE_ACTIVE_STYLE : JOB_STAGE_INACTIVE_STYLE}
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div className="flex flex-wrap items-center gap-2">

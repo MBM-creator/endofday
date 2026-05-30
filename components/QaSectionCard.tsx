@@ -1,6 +1,5 @@
 import type { ReactNode } from 'react';
 import type { QaSectionCardTone } from '@/lib/qa-section-card-style';
-import { getQaSectionCardClass, getQaSectionCardStyle } from '@/lib/qa-section-card-style';
 
 export function QaSectionCard({
   tone,
@@ -13,8 +12,8 @@ export function QaSectionCard({
 }) {
   return (
     <li
-      className={`border rounded-lg p-4 shadow-sm ${getQaSectionCardClass(tone)} ${className}`.trim()}
-      style={getQaSectionCardStyle(tone)}
+      data-qa-card-tone={tone}
+      className={`border rounded-lg p-4 shadow-sm ${className}`.trim()}
     >
       {children}
     </li>
