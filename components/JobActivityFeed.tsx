@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Upload } from 'tus-js-client';
 import { createSupabaseBrowserClient } from '@/lib/supabase-browser';
+import { compressImageForUpload } from '@/lib/client-image-compression';
 import {
   JOB_NOTE_MAX_BODY_LENGTH,
+  JOB_NOTE_IMAGE_MAX_BYTES,
+  JOB_NOTE_IMAGE_MAX_PER_NOTE,
   JOB_NOTE_VIDEO_MAX_BYTES,
   JOB_NOTE_VIDEO_MAX_SECONDS,
   JOB_NOTE_VIDEO_MIME_TYPES,
@@ -19,7 +22,7 @@ interface NoteAttachment {
   id: string;
   note_id: string;
   job_id: string;
-  media_type: 'video';
+  media_type: 'video' | 'image';
   mime_type: string;
   file_name: string | null;
   file_size_bytes: number;
@@ -67,6 +70,7 @@ interface JobActivityFeedProps {
 }
 
 const ACCEPTED_VIDEO_TYPES = JOB_NOTE_VIDEO_MIME_TYPES.join(',');
+const ACCEPTED_IMAGE_TYPES = 'image/jpeg,image/png,image/webp,image/heic,image/heif';
 
 function formatDateTime(iso: string): string {
   try {
@@ -166,10 +170,14 @@ export function JobActivityFeed({
   const [reportDate, setReportDate] = useState(todayDateInputValue);
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imageError, setImageError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [uploadPct, setUploadPct] = useState<number | null>(null);
+  const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const videoRef = useRef<HTMLInputElement>(null);
+  const imageRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setStageId((current) => current || activeStageId || '');
@@ -208,16 +216,65 @@ export function JobActivityFeed({
     if (!JOB_NOTE_VIDEO_MIME_TYPES.includes(file.type as (typeof JOB_NOTE_VIDEO_MIME_TYPES)[number])) {
       setVideoFile(null);
       setVideoError('Video must be MP4, MOV, or WebM.');
-      if (fileRef.current) fileRef.current.value = '';
+      if (videoRef.current) videoRef.current.value = '';
       return;
     }
     if (file.size > JOB_NOTE_VIDEO_MAX_BYTES) {
       setVideoFile(null);
       setVideoError('Video must be 50MB or smaller.');
-      if (fileRef.current) fileRef.current.value = '';
+      if (videoRef.current) videoRef.current.value = '';
       return;
     }
     setVideoFile(file);
+  }
+
+  function handleImageSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files ?? []);
+    setImageError(null);
+    if (selected.length === 0) {
+      setImageFiles([]);
+      return;
+    }
+
+    const next: File[] = [];
+    for (const file of selected) {
+      if (!file.type.startsWith('image/')) {
+        setImageError('Photos must be image files (JPEG, PNG, or WebP).');
+        setImageFiles([]);
+        if (imageRef.current) imageRef.current.value = '';
+        return;
+      }
+      if (file.size > JOB_NOTE_IMAGE_MAX_BYTES) {
+        setImageError('Each photo must be 10MB or smaller.');
+        setImageFiles([]);
+        if (imageRef.current) imageRef.current.value = '';
+        return;
+      }
+      next.push(file);
+    }
+
+    if (next.length > JOB_NOTE_IMAGE_MAX_PER_NOTE) {
+      setImageError(`You can add up to ${JOB_NOTE_IMAGE_MAX_PER_NOTE} photos per note.`);
+      setImageFiles([]);
+      if (imageRef.current) imageRef.current.value = '';
+      return;
+    }
+
+    setImageFiles(next);
+  }
+
+  async function uploadNoteImage(noteId: string, file: File): Promise<void> {
+    const compressed = await compressImageForUpload(file);
+    const formData = new FormData();
+    formData.append('file', compressed, compressed.name || file.name || 'photo.jpg');
+    const res = await fetch(
+      `/api/jobs/${jobId}/notes/${noteId}/attachments/image?orgSlug=${encodeURIComponent(orgSlug)}`,
+      { method: 'POST', body: formData }
+    );
+    const data = await res.json();
+    if (!res.ok || !data?.ok) {
+      throw new Error(typeof data?.message === 'string' ? data.message : 'Failed to upload photo');
+    }
   }
 
   async function createNote() {
@@ -229,7 +286,7 @@ export function JobActivityFeed({
         body: trimmed,
         stageId: stageId || null,
         reportDate,
-        hasAttachmentIntent: Boolean(videoFile),
+        hasAttachmentIntent: Boolean(videoFile || imageFiles.length > 0),
       }),
     });
     const data = await res.json();
@@ -255,9 +312,10 @@ export function JobActivityFeed({
     if (submitting) return;
     setError(null);
     setVideoError(null);
+    setImageError(null);
     const trimmed = body.trim();
-    if (!trimmed && !videoFile) {
-      setError('Add a note or video before posting.');
+    if (!trimmed && !videoFile && imageFiles.length === 0) {
+      setError('Add a note, photo, or video before posting.');
       return;
     }
     if (trimmed.length > JOB_NOTE_MAX_BODY_LENGTH) {
@@ -266,13 +324,25 @@ export function JobActivityFeed({
     }
 
     setSubmitting(true);
-    setUploadPct(videoFile ? 0 : null);
+    setUploadPct(null);
+    setUploadLabel(null);
     let noteId: string | null = null;
     try {
       const note = await createNote();
       noteId = note.id;
 
+      if (imageFiles.length > 0) {
+        for (let index = 0; index < imageFiles.length; index += 1) {
+          setUploadLabel(`Uploading photo ${index + 1} of ${imageFiles.length}…`);
+          setUploadPct(Math.round(((index + 0.5) / imageFiles.length) * 100));
+          await uploadNoteImage(note.id, imageFiles[index]!);
+          setUploadPct(Math.round(((index + 1) / imageFiles.length) * 100));
+        }
+      }
+
       if (videoFile) {
+        setUploadLabel('Uploading video…');
+        setUploadPct(0);
         const duration = await videoDuration(videoFile);
         if (duration != null && duration > JOB_NOTE_VIDEO_MAX_SECONDS + 1) {
           await removeEmptyFailedNote(note.id);
@@ -324,8 +394,11 @@ export function JobActivityFeed({
       setBody('');
       setReportDate(todayDateInputValue());
       setVideoFile(null);
+      setImageFiles([]);
       setUploadPct(null);
-      if (fileRef.current) fileRef.current.value = '';
+      setUploadLabel(null);
+      if (videoRef.current) videoRef.current.value = '';
+      if (imageRef.current) imageRef.current.value = '';
       await loadNotes();
     } catch (err) {
       if (noteId) await removeEmptyFailedNote(noteId);
@@ -333,11 +406,12 @@ export function JobActivityFeed({
     } finally {
       setSubmitting(false);
       setUploadPct(null);
+      setUploadLabel(null);
     }
   }
 
   async function deleteNote(note: JobNote) {
-    if (!window.confirm('Delete this note and its videos?')) return;
+    if (!window.confirm('Delete this note and its photos/videos?')) return;
     setDeleteId(note.id);
     setError(null);
     try {
@@ -360,7 +434,7 @@ export function JobActivityFeed({
   return (
     <section className={compact ? 'space-y-4' : 'mt-8 space-y-4'}>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-gray-900">Notes and videos</h2>
+        <h2 className="text-lg font-semibold text-gray-900">Notes, photos and videos</h2>
         {!loading && notes.length > 0 && (
           <button type="button" onClick={loadNotes} className="text-sm font-medium text-[#698F00] hover:underline">
             Refresh
@@ -397,7 +471,7 @@ export function JobActivityFeed({
             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-transparent focus:ring-2 focus:ring-[#698F00] disabled:bg-gray-100"
           />
           <p className="mt-1 text-xs text-gray-500">
-            Used for the note/video schedule link and daily timeline filters.
+            Used for the note/photo/video schedule link and daily timeline filters.
           </p>
         </div>
         <div>
@@ -413,9 +487,30 @@ export function JobActivityFeed({
           />
         </div>
         <div>
+          <label className="mb-1 block text-sm font-medium text-gray-700">Photos</label>
+          <input
+            ref={imageRef}
+            type="file"
+            accept={ACCEPTED_IMAGE_TYPES}
+            multiple
+            onChange={handleImageSelect}
+            disabled={submitting}
+            className="w-full text-sm text-gray-600 file:mr-3 file:rounded-lg file:border file:border-gray-300 file:bg-white file:px-3 file:py-2 file:text-gray-700 hover:file:bg-gray-50 disabled:opacity-50"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            JPEG, PNG, or WebP. Up to {JOB_NOTE_IMAGE_MAX_PER_NOTE} photos, 10MB each.
+          </p>
+          {imageFiles.length > 0 && (
+            <p className="mt-1 text-xs font-medium text-gray-700">
+              Selected: {imageFiles.length} photo{imageFiles.length === 1 ? '' : 's'}
+            </p>
+          )}
+          {imageError && <p className="mt-1 text-sm text-red-700">{imageError}</p>}
+        </div>
+        <div>
           <label className="mb-1 block text-sm font-medium text-gray-700">Video</label>
           <input
-            ref={fileRef}
+            ref={videoRef}
             type="file"
             accept={ACCEPTED_VIDEO_TYPES}
             capture="environment"
@@ -440,7 +535,9 @@ export function JobActivityFeed({
             <div className="h-2 overflow-hidden rounded-full bg-gray-200">
               <div className="h-full rounded-full bg-[#698F00]" style={{ width: `${uploadPct}%` }} />
             </div>
-            <p className="mt-1 text-xs text-gray-600">Uploading video… {uploadPct}%</p>
+            <p className="mt-1 text-xs text-gray-600">
+              {uploadLabel ?? 'Uploading…'} {uploadPct}%
+            </p>
           </div>
         )}
         {error && (
@@ -460,7 +557,7 @@ export function JobActivityFeed({
       {loading && <p className="text-sm text-gray-600">Loading notes…</p>}
       {!loading && notes.length === 0 && (
         <div className="rounded-lg border border-gray-200 bg-white p-4 text-sm text-gray-600">
-          No notes or videos yet.
+          No notes, photos or videos yet.
         </div>
       )}
       {!loading && notes.length > 0 && (
@@ -504,13 +601,24 @@ export function JobActivityFeed({
                 <div className="mt-3 space-y-3">
                   {note.attachments.map((attachment) => (
                     <div key={attachment.id}>
-                      <video
-                        src={attachment.url}
-                        controls
-                        preload="metadata"
-                        playsInline
-                        className="w-full rounded-lg border border-gray-200 bg-black"
-                      />
+                      {attachment.media_type === 'image' ? (
+                        <a href={attachment.url} target="_blank" rel="noopener noreferrer" className="block">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={attachment.url}
+                            alt={attachment.file_name ?? 'Site photo'}
+                            className="max-h-80 w-full rounded-lg border border-gray-200 object-contain bg-gray-50"
+                          />
+                        </a>
+                      ) : (
+                        <video
+                          src={attachment.url}
+                          controls
+                          preload="metadata"
+                          playsInline
+                          className="w-full rounded-lg border border-gray-200 bg-black"
+                        />
+                      )}
                       <p className="mt-1 text-xs text-gray-500">
                         {[attachment.file_name, formatBytes(attachment.file_size_bytes), formatReportDate(note.report_date)]
                           .filter(Boolean)

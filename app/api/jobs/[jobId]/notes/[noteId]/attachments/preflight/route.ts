@@ -86,10 +86,11 @@ export async function POST(
     return serverError(requestId, 'SUPABASE_PUBLIC_ENV', 'Supabase public environment variables are missing');
   }
 
-  const { data: existingAttachment, error: existingError } = await supabaseAdmin
+  const { data: existingVideo, error: existingError } = await supabaseAdmin
     .from('job_note_attachments')
     .select('id')
     .eq('note_id', noteId)
+    .eq('media_type', 'video')
     .is('deleted_at', null)
     .limit(1)
     .maybeSingle();
@@ -99,7 +100,7 @@ export async function POST(
     console.error('[job note attachment preflight] existing check failed:', { requestId, supabaseError: supabaseErr });
     return serverError(requestId, supabaseErr.code ?? 'NOTE_ATTACHMENT_CHECK', 'Failed to prepare upload');
   }
-  if (existingAttachment) {
+  if (existingVideo) {
     return jsonError('This note already has a video attached', 400, requestId);
   }
 

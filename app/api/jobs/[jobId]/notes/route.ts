@@ -105,7 +105,7 @@ export async function GET(
           storage_path: attachment.storage_path,
           supabaseError: supabaseErr,
         });
-        return serverError(requestId, supabaseErr.code ?? 'NOTE_ATTACHMENT_SIGN', 'Failed to load video URL');
+        return serverError(requestId, supabaseErr.code ?? 'NOTE_ATTACHMENT_SIGN', 'Failed to load attachment URL');
       }
       attachments.push({
         id: attachment.id,
@@ -177,7 +177,7 @@ export async function POST(
   const reportDate = normalizeReportDate(body.reportDate);
   const hasAttachmentIntent = body.hasAttachmentIntent === true;
   if (!noteBody && !hasAttachmentIntent) {
-    return jsonError('Add a note or video before posting', 400, requestId);
+    return jsonError('Add a note, photo, or video before posting', 400, requestId);
   }
   if (noteBody.length > JOB_NOTE_MAX_BODY_LENGTH) {
     return jsonError(`Note must be at most ${JOB_NOTE_MAX_BODY_LENGTH} characters`, 400, requestId);

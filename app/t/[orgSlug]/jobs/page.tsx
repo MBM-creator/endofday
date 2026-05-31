@@ -104,15 +104,6 @@ export default function JobsListPage() {
     };
   }, [orgSlug]);
 
-  function formatDate(iso: string): string {
-    try {
-      const d = new Date(iso);
-      return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { dateStyle: 'short' });
-    } catch {
-      return '';
-    }
-  }
-
   function normalise(value: string | null | undefined): string {
     return (value ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
   }
@@ -227,14 +218,21 @@ export default function JobsListPage() {
     });
   }, [ccProjects, visibleCcProjectIds, visibleLegacyTitleKeys]);
 
-  function clientConnectLabel(job: Job): { title: string; client: string | null; address: string | null; isLinked: boolean } {
+  function jobCardLabel(job: Job): { headline: string; address: string | null } {
     const project = ccProjectForJob(job);
+    if (project) {
+      const name = project.client_name.trim();
+      const phone = project.client_contact?.trim();
+      return {
+        headline: phone ? `${name} — ${phone}` : name,
+        address: project.site_address?.trim() || null,
+      };
+    }
 
+    const snapshotClient = job.cc_client_name_snapshot?.trim();
     return {
-      title: project?.project_title ?? job.cc_project_title_snapshot ?? job.name,
-      client: project ? ccClientDisplayName(project) : job.cc_client_name_snapshot ?? null,
-      address: project?.site_address ?? null,
-      isLinked: Boolean(project || job.cc_project_id || job.cc_client_id || job.cc_project_title_snapshot || job.cc_client_name_snapshot),
+      headline: snapshotClient || job.name,
+      address: null,
     };
   }
 
@@ -308,25 +306,16 @@ export default function JobsListPage() {
         {!loading && !error && (visibleJobs.length > 0 || availableCcProjects.length > 0) && (
           <ul className="space-y-3">
             {visibleJobs.map((job) => {
-              const ccLabel = clientConnectLabel(job);
+              const label = jobCardLabel(job);
               return (
                 <li key={job.id}>
                   <Link
                     href={`/t/${orgSlug}/jobs/${job.id}`}
                     className="block rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:border-[#698F00] hover:shadow"
                   >
-                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                      <span className="font-medium text-gray-900">{ccLabel.title}</span>
-                      {job.created_at && (
-                        <span className="text-sm text-gray-500">
-                          {formatDate(job.created_at)}
-                        </span>
-                      )}
-                    </div>
-                    {ccLabel.isLinked && (ccLabel.client || ccLabel.address) && (
-                      <p className="mt-1 text-sm text-gray-600">
-                        {[ccLabel.client, ccLabel.address].filter(Boolean).join(' — ')}
-                      </p>
+                    <p className="font-medium text-gray-900">{label.headline}</p>
+                    {label.address && (
+                      <p className="mt-1 text-sm text-gray-600">{label.address}</p>
                     )}
                   </Link>
                 </li>

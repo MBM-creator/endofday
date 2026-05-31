@@ -154,3 +154,13 @@ export function jobNoteVideoStoragePath(
   const seg = jobSlugOrIdSegment(jobId, jobName);
   return `jobs/${seg}/notes/${noteId}/videos/${fileName}`;
 }
+
+export function jobNoteImageStoragePath(
+  jobId: string,
+  jobName: string,
+  noteId: string,
+  fileName: string
+): string {
+  const seg = jobSlugOrIdSegment(jobId, jobName);
+  return `jobs/${seg}/notes/${noteId}/images/${fileName}`;
+}
