@@ -36,6 +36,17 @@ export default function JobsListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creatingProjectId, setCreatingProjectId] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    if (!orgSlug) return;
+    fetch(`/api/auth/me?orgSlug=${encodeURIComponent(orgSlug)}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.ok && data?.staff?.role === 'admin') setIsAdmin(true);
+      })
+      .catch(() => setIsAdmin(false));
+  }, [orgSlug]);
 
   useEffect(() => {
     if (!orgSlug) {
@@ -258,14 +269,24 @@ export default function JobsListPage() {
       <div className="max-w-2xl mx-auto">
         <div className="mb-6 flex items-center justify-between gap-3">
           <h1 className="text-2xl font-bold text-gray-900">Jobs</h1>
-          {orgSlug && (
-            <Link
-              href={`/t/${orgSlug}/jobs/new`}
-              className="rounded-lg bg-[#698F00] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a7d00]"
-            >
-              New job
-            </Link>
-          )}
+          <div className="flex items-center gap-2">
+            {isAdmin && orgSlug && (
+              <Link
+                href={`/t/${orgSlug}/admin`}
+                className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50"
+              >
+                Admin
+              </Link>
+            )}
+            {orgSlug && (
+              <Link
+                href={`/t/${orgSlug}/jobs/new`}
+                className="rounded-lg bg-[#698F00] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a7d00]"
+              >
+                New job
+              </Link>
+            )}
+          </div>
         </div>
 
         {error && (

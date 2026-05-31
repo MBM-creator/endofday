@@ -26,6 +26,16 @@ export interface StaffAuthContext {
 }
 
 const ALL_ROLES: StaffRole[] = ['field', 'supervisor', 'admin'];
+const ADMIN_ROLES: StaffRole[] = ['admin'];
+const SUPERVISOR_OR_ADMIN_ROLES: StaffRole[] = ['supervisor', 'admin'];
+
+export function isAdminRole(role: StaffRole): boolean {
+  return role === 'admin';
+}
+
+export function isSupervisorOrAdminRole(role: StaffRole): boolean {
+  return role === 'supervisor' || role === 'admin';
+}
 
 function authJson(message: string, status: number) {
   return NextResponse.json({ ok: false, message }, { status });
@@ -120,6 +130,14 @@ export async function requireStaffProfile(
     org: resolved.org,
     user: { id: user.id, email: user.email },
   };
+}
+
+export async function requireAdmin(orgSlug: string): Promise<StaffAuthContext | NextResponse> {
+  return requireStaffProfile(orgSlug, ADMIN_ROLES);
+}
+
+export async function requireSupervisorOrAdmin(orgSlug: string): Promise<StaffAuthContext | NextResponse> {
+  return requireStaffProfile(orgSlug, SUPERVISOR_OR_ADMIN_ROLES);
 }
 
 export async function countActiveAdmins(orgId: string): Promise<number> {

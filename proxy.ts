@@ -28,7 +28,7 @@ function extractOrgSlugFromPath(pathname: string): string | null {
 }
 
 function requiresAdminRole(pathname: string): boolean {
-  return pathname.includes('/admin/');
+  return /\/admin(\/|$)/.test(pathname);
 }
 
 export async function proxy(request: NextRequest) {
