@@ -102,15 +102,14 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
     title: 'Existing fence removal / site clearance',
     description: 'Confirm the existing fence has been removed cleanly and the site is ready for post holes.',
     purpose: 'Prevent hidden damage or waste issues before new fencing work proceeds.',
-    requiredEvidence: ['Existing fence before removal', 'Fence removed', 'Waste stacked/removed safely', 'Ground line exposed', 'Unexpected issues photographed'],
+    requiredEvidence: ['Fence removed', 'Waste removed', 'Ground line exposed', 'Unexpected issues photographed'],
     criticalFails: ['Waste uncontrolled', 'Neighbouring property damaged', 'Ground line not exposed', 'Site not ready for post holes'],
     items: [
-      item('existing_fence_before', 'Existing fence photographed before removal', { requirePhoto: true, criticalOnFail: true }),
-      item('fence_removed', 'Existing fence removed cleanly', { requirePhoto: true, criticalOnFail: true }),
-      item('waste_controlled', 'Waste stacked or removed safely', { requirePhoto: true, criticalOnFail: true }),
-      item('ground_line_exposed', 'Ground line exposed and ready for post holes', { requirePhoto: true, criticalOnFail: true }),
+      item('fence_removed', 'Existing fence removed cleanly', { criticalOnFail: true }),
+      item('waste_controlled', 'Waste removed', { criticalOnFail: true }),
+      item('ground_line_exposed', 'Ground line exposed and ready for post holes', { criticalOnFail: true }),
       item('neighbour_property_not_damaged', 'Neighbouring property not damaged', { criticalOnFail: true, noteRequiredWhen: ['fail'] }),
-      item('unexpected_issues_photographed', 'Unexpected issues photographed and noted', { allowNa: true, requirePhoto: true, requireSupervisorOnFail: true, noteRequiredWhen: ['pass', 'fail', 'not_required'] }),
+      item('unexpected_issues_photographed', 'Unexpected issues photographed and noted', { allowNa: true, requirePhoto: true, requireSupervisorOnFail: true, noteRequiredWhen: ['pass', 'fail'] }),
     ],
   },
   {
@@ -118,15 +117,13 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
     title: 'Post holes before concrete',
     description: 'Verify hole locations, size, ground conditions and service/root obstructions before posts are set.',
     purpose: 'Confirm the post holes suit the approved set-out and fence type before concrete is placed.',
-    requiredEvidence: ['Hole locations along stringline', 'Representative hole depth/diameter', 'End/corner/gate post holes', 'Ground condition', 'Service/root/obstruction issues'],
-    criticalFails: ['Holes off line', 'Depth/diameter unsuitable', 'Gate/end/corner allowance missing', 'Service or obstruction issue unresolved'],
+    requiredEvidence: ['Hole locations along stringline', 'Representative hole depth/diameter', 'End/corner/gate post holes'],
+    criticalFails: ['Holes off line', 'Depth/diameter unsuitable', 'Gate/end/corner allowance missing'],
     items: [
       item('holes_along_stringline', 'Hole locations align with approved stringline', { requirePhoto: true, criticalOnFail: true }),
       item('representative_depth_diameter', 'Representative hole depth/diameter photographed', { requirePhoto: true, criticalOnFail: true, noteRequiredWhen: ['pass', 'fail'] }),
       item('spacing_suits_fence_type', 'Hole spacing suits fence type', { criticalOnFail: true }),
       item('end_corner_gate_holes', 'End/corner/gate post holes allowed for where relevant', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
-      item('ground_condition', 'Ground condition photographed', { requirePhoto: true, requireSupervisorOnFail: true }),
-      item('no_service_obstruction_issue', 'No unresolved service, root or obstruction issue', { criticalOnFail: true, noteRequiredWhen: ['fail'] }),
     ],
   },
   {
@@ -134,16 +131,14 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
     title: 'Posts installed / concreted',
     description: 'Confirm posts are aligned, plumb and concreted before rails or framing proceed.',
     purpose: 'Make sure the frame has a straight and secure post base.',
-    requiredEvidence: ['Posts installed before rails', 'Stringline alignment', 'Level/plumb check', 'Concrete around posts', 'Gate posts where relevant'],
-    criticalFails: ['Posts out of plumb', 'Posts off line', 'Gate/end/corner posts misplaced', 'Posts not secure enough to continue'],
+    requiredEvidence: ['Stringline alignment', 'Level/plumb check', 'Concrete around posts', 'Gate posts where relevant'],
+    criticalFails: ['Posts out of plumb', 'Posts off line', 'Gate posts misplaced', 'Posts not secure and stable'],
     items: [
-      item('posts_before_rails', 'Posts installed before rails', { requirePhoto: true, criticalOnFail: true }),
       item('stringline_alignment', 'Posts aligned to stringline', { requirePhoto: true, criticalOnFail: true }),
       item('plumb_level_check', 'Level/plumb check completed', { requirePhoto: true, criticalOnFail: true }),
       item('concrete_around_posts', 'Concrete placed around posts', { requirePhoto: true, criticalOnFail: true }),
-      item('spacing_suitable_for_frame', 'Post spacing suitable for rails, palings or pickets', { criticalOnFail: true }),
-      item('gate_posts_correct', 'Gate posts correctly located where relevant', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
-      item('posts_secure_to_continue', 'Posts secure enough to continue', { criticalOnFail: true }),
+      item('gate_posts_correct', 'Gate posts correctly located where relevant', { requirePhoto: true, criticalOnFail: true }),
+      item('posts_secure_to_continue', 'Post secure and stable', { criticalOnFail: true }),
     ],
   },
   {
@@ -151,16 +146,14 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
     title: 'Rails / frame / plinth',
     description: 'Check rails, frame, fixings and plinth where selected before cladding starts.',
     purpose: 'Confirm the frame is straight, secure and ready for palings or pickets.',
-    requiredEvidence: ['Rails before cladding', 'Rail heights', 'Rail fixings', 'Plinth board if selected', 'Gate frame structure if relevant'],
-    criticalFails: ['Rails not straight', 'Rail heights unsuitable', 'Fixings insecure', 'Plinth missing where selected', 'Frame not ready for cladding'],
+    requiredEvidence: ['Rail heights', 'Rail fixings', 'Plinth board if selected', 'Gate frame structure if relevant'],
+    criticalFails: ['Rails not straight', 'Rail heights unsuitable', 'Fixings insecure', 'Plinth missing where selected'],
     items: [
-      item('rails_before_cladding', 'Rails photographed before cladding', { requirePhoto: true, criticalOnFail: true }),
       item('rail_heights', 'Rail heights suit paling or picket layout', { requirePhoto: true, criticalOnFail: true }),
       item('rails_straight_level_raked', 'Rails straight and consistently level/raked', { criticalOnFail: true }),
-      item('rail_fixings_secure', 'Rails securely fixed', { requirePhoto: true, criticalOnFail: true }),
+      item('rail_fixings_secure', 'Rails securely fixed', { criticalOnFail: true }),
       item('plinth_installed', 'Plinth installed where selected', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
-      item('gate_frame_structure', 'Gate frame structure ready where relevant', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
-      item('frame_ready_for_cladding', 'Frame ready for palings/pickets', { criticalOnFail: true }),
+      item('gate_frame_structure', 'Gate frame structure ready where relevant', { requirePhoto: true, criticalOnFail: true }),
     ],
   },
   {
@@ -168,16 +161,12 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
     title: 'Paling installation',
     description: 'Check paling side, overlap/layout, fixing pattern, lines and representative finished section.',
     purpose: 'Confirm the paling face is installed consistently before capping or final review.',
-    requiredEvidence: ['First section started', 'Paling overlap/spacing detail', 'Fixing pattern', 'Top and bottom line', 'Corners/ends/returns', 'Completed representative section'],
-    criticalFails: ['Wrong facing side', 'Inconsistent overlap/layout', 'Poor fixing pattern', 'Damaged palings installed', 'Finished line unacceptable'],
+    requiredEvidence: ['Paling overlap/spacing detail', 'Corners/ends/returns'],
+    criticalFails: ['Wrong facing side', 'Inconsistent overlap/layout or height', 'Damaged palings installed'],
     items: [
-      item('first_section_started', 'First section started and photographed', { requirePhoto: true, criticalOnFail: true }),
       item('correct_side_facing', 'Palings installed to correct side/facing', { criticalOnFail: true }),
-      item('overlap_spacing_detail', 'Paling overlap/layout is correct and consistent', { requirePhoto: true, criticalOnFail: true }),
-      item('fixing_pattern', 'Fixing pattern consistent', { requirePhoto: true, criticalOnFail: true }),
-      item('top_bottom_line', 'Top and bottom line visually acceptable', { requirePhoto: true, criticalOnFail: true }),
+      item('overlap_spacing_detail', 'Paling overlap/layout is correct and height is consistent', { requirePhoto: true, criticalOnFail: true }),
       item('corners_ends_returns', 'Corners, ends and returns finished correctly', { requirePhoto: true, criticalOnFail: true }),
-      item('representative_section_complete', 'Completed representative section photographed', { requirePhoto: true, criticalOnFail: true }),
       item('no_damaged_palings', 'No damaged or unsuitable palings installed', { criticalOnFail: true }),
     ],
   },
@@ -235,17 +224,21 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
   },
   {
     code: 'capping_finish',
-    title: 'Capping / finish',
+    title: 'Finish',
     description: 'Confirm capping and finish/coating details where selected.',
     purpose: 'Verify finishing works before final supervisor review.',
-    requiredEvidence: ['Capping installed if selected', 'Joins/ends/returns', 'Product used if coating selected', 'Finished surfaces', 'Adjacent surfaces protected'],
-    criticalFails: ['Capping not straight or secure', 'Joints poor', 'Product mismatch', 'Coating uneven', 'Adjacent damage'],
+    requiredEvidence: ['Capping installed if selected', 'Paint/stain if selected', 'Finished surfaces', 'Adjacent surfaces protected'],
+    criticalFails: ['Capping not straight or secure', 'Product mismatch', 'Coating uneven', 'Adjacent damage'],
     items: [
-      item('capping_installed', 'Capping installed where selected', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
-      item('joins_ends_returns', 'Joins, ends and returns neat', { requirePhoto: true, criticalOnFail: true }),
-      item('product_used', 'Product used matches scope where coating/finish is selected', { allowNa: true, requirePhoto: true, criticalOnFail: true, noteRequiredWhen: ['pass', 'fail', 'not_required'] }),
-      item('finished_surfaces', 'Finished surfaces acceptable', { requirePhoto: true, criticalOnFail: true }),
+      item('capping_installed', 'Capping installed where selected', { requirePhoto: true, criticalOnFail: true }),
+      item('product_used', 'Paint / Stain matches scope where coating/finish', {
+        requirePhoto: true,
+        criticalOnFail: true,
+        noteRequiredWhen: ['pass', 'fail'],
+        notePrompt: 'What paint/stain colour or finish is being used?',
+      }),
       item('adjacent_surfaces_protected', 'Adjacent surfaces protected', { requirePhoto: true, criticalOnFail: true }),
+      item('finished_surfaces', 'Finished surfaces acceptable', { requirePhoto: true, criticalOnFail: true }),
       item('no_misses_drips_damage', 'No obvious misses, drips or damage', { criticalOnFail: true }),
     ],
   },
@@ -260,12 +253,12 @@ const ALL_SECTIONS: FencingCatalogueSection[] = [
       item('full_fence_both_ends', 'Full fence photographed from both ends', { requirePhoto: true, criticalOnFail: true }),
       item('front_back_faces', 'Front/back faces photographed where accessible', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
       item('corners_returns', 'Corners and returns photographed', { requirePhoto: true, criticalOnFail: true }),
-      item('gates_open_closed', 'Gates photographed open and closed where relevant', { allowNa: true, requirePhoto: true, criticalOnFail: true }),
-      item('cleaned_work_area', 'Work area cleaned', { requirePhoto: true, criticalOnFail: true }),
+      item('gates_open_closed', 'Gates photographed open and closed where relevant', { requirePhoto: true, criticalOnFail: true }),
+      item('cleaned_work_area', 'Work area clean and all waste removed', { requirePhoto: true, criticalOnFail: true }),
       item('waste_removed', 'Waste removed', { requirePhoto: true, criticalOnFail: true }),
       item('fence_line_height_acceptable', 'Fence line straight and finished height consistent', { criticalOnFail: true }),
       item('posts_rails_cladding_secure', 'Posts, rails and cladding secure', { criticalOnFail: true }),
-      item('gates_operate', 'Gates operate correctly where relevant', { allowNa: true, criticalOnFail: true }),
+      item('gates_operate', 'Gates operate correctly where relevant', { criticalOnFail: true }),
       item('scope_complete_no_defects', 'Scope complete with no unresolved defects', { criticalOnFail: true, noteRequiredWhen: ['fail'] }),
     ],
   },
@@ -299,13 +292,25 @@ export function getFencingSectionDefinition(code: FencingSectionCode): FencingCa
   return SECTION_BY_CODE.get(code);
 }
 
+const GATE_GATED_ITEM_KEYS = new Set([
+  'gate_opening_confirmed',
+  'gate_posts_correct',
+  'gate_frame_structure',
+  'gates_open_closed',
+  'gates_operate',
+]);
+
 export function getFencingSectionItemsForSetup(
   code: FencingSectionCode,
   setup: FencingQaSetupV1
 ): FencingCatalogueItem[] {
   const base = getFencingSectionDefinition(code)?.items ?? [];
-  if (code !== 'setout_boundary_height') return base;
-  return base.filter((item) => item.key !== 'gate_opening_confirmed' || setup.gate);
+  return base.filter((item) => {
+    if (GATE_GATED_ITEM_KEYS.has(item.key)) return setup.gate;
+    if (item.key === 'capping_installed') return setup.capping;
+    if (item.key === 'product_used') return setup.finish_coating;
+    return true;
+  });
 }
 
 export function getFencingSectionsForSetup(setup: FencingQaSetupV1): FencingCatalogueSection[] {
