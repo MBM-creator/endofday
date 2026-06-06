@@ -98,8 +98,13 @@ export default function TodaysWorkPage() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [runs, setRuns] = useState<QaRun[]>([]);
   const [viewerRole, setViewerRole] = useState<StaffRole>('field');
+  const [clientReady, setClientReady] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setClientReady(true);
+  }, []);
 
   useEffect(() => {
     if (!orgSlug || !jobId) {
@@ -176,15 +181,15 @@ export default function TodaysWorkPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        {loading && <p className="text-gray-600">Loading…</p>}
+        {(!clientReady || loading) && <p className="text-gray-600">Loading…</p>}
 
-        {error && (
+        {clientReady && error && (
           <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-800">
             {error}
           </div>
         )}
 
-        {!loading && !error && job && (
+        {clientReady && !loading && !error && job && (
           <div className="space-y-6">
             <div>
               <Link href={detailHref} className="text-sm text-[#698F00] hover:underline">
@@ -270,7 +275,7 @@ export default function TodaysWorkPage() {
               <div className="p-5 bg-white border border-gray-200 rounded-lg shadow-sm">
                 <p className="text-sm font-medium text-gray-900">No active QA run</p>
                 <p className="mt-1 text-gray-700">
-                  Start from the QA hub so the supervisor can select the checklist needed for this stage or project.
+                  No QA checklist has been started for this stage.
                 </p>
                 {hasLegacyRuns && viewerRole !== 'field' && (
                   <p className="mt-2 text-sm text-amber-800">
@@ -298,6 +303,8 @@ export default function TodaysWorkPage() {
               hideHeaderContext
               hideQaEvidenceWarning
               historyDefaultOpen={false}
+              compactTaskMode
+              formDefaultOpen={false}
             />
 
             <JobActivityFeed

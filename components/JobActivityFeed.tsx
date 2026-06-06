@@ -12,6 +12,7 @@ import {
   JOB_NOTE_VIDEO_MAX_SECONDS,
   JOB_NOTE_VIDEO_MIME_TYPES,
 } from '@/lib/job-notes';
+import { todayReportDate } from '@/lib/report-date';
 
 interface StageOption {
   id: string;
@@ -91,14 +92,6 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(bytes > 10 * 1024 * 1024 ? 0 : 1)} MB`;
 }
 
-function todayDateInputValue(): string {
-  const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
-}
-
 function formatReportDate(value: string | null): string {
   if (!value) return 'No date';
   const [year, month, day] = value.split('-').map(Number);
@@ -172,7 +165,7 @@ export function JobActivityFeed({
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [stageId, setStageId] = useState<string>(activeStageId ?? '');
-  const [reportDate, setReportDate] = useState(todayDateInputValue);
+  const [reportDate, setReportDate] = useState('');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
   const [imageFiles, setImageFiles] = useState<File[]>([]);
@@ -183,6 +176,10 @@ export function JobActivityFeed({
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const videoRef = useRef<HTMLInputElement>(null);
   const imageRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setReportDate(todayReportDate());
+  }, []);
 
   useEffect(() => {
     setStageId((current) => current || activeStageId || '');
@@ -398,7 +395,7 @@ export function JobActivityFeed({
       }
 
       setBody('');
-      setReportDate(todayDateInputValue());
+      setReportDate(todayReportDate());
       setVideoFile(null);
       setImageFiles([]);
       setUploadPct(null);
