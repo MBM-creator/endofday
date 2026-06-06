@@ -37,6 +37,7 @@ export async function validateJobForOrg(
         active_stage_id: string | null;
         cc_project_id: string | null;
         cc_quote_id: string | null;
+        cc_job_id: string | null;
         cc_client_id: string | null;
         cc_project_title_snapshot: string | null;
         cc_client_name_snapshot: string | null;
@@ -74,7 +75,7 @@ export async function validateJobForOrg(
   const { data: job, error: jobError } = await supabaseAdmin
     .from('jobs')
     .select(
-      'id, name, organisation_id, active_stage_id, cc_project_id, cc_quote_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
+      'id, name, organisation_id, active_stage_id, cc_project_id, cc_quote_id, cc_job_id, cc_client_id, cc_project_title_snapshot, cc_client_name_snapshot'
     )
     .eq('id', jobId)
     .eq('organisation_id', org.id)
@@ -101,6 +102,7 @@ export async function validateJobForOrg(
       active_stage_id: (job.active_stage_id as string | null) ?? null,
       cc_project_id: (job.cc_project_id as string | null) ?? null,
       cc_quote_id: (job.cc_quote_id as string | null) ?? null,
+      cc_job_id: (job.cc_job_id as string | null) ?? null,
       cc_client_id: (job.cc_client_id as string | null) ?? null,
       cc_project_title_snapshot: (job.cc_project_title_snapshot as string | null) ?? null,
       cc_client_name_snapshot: (job.cc_client_name_snapshot as string | null) ?? null,

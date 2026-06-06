@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
+import { DailySiteUpdatePanel } from '@/components/DailySiteUpdatePanel';
 import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
 
@@ -202,6 +203,8 @@ export default function TodaysWorkPage() {
                 </div>
               )}
             </div>
+
+            <DailySiteUpdatePanel orgSlug={orgSlug} jobId={jobId} jobName={job.name} job={job} />
 
             <JobActivityFeed
               orgSlug={orgSlug}

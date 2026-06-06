@@ -6,7 +6,8 @@ export type ContextSourceType =
   | 'qa_run'
   | 'qa_section'
   | 'daily_report'
-  | 'stage_end_of_day';
+  | 'stage_end_of_day'
+  | 'job_daily_site_update';
 
 export type ContextTargetType =
   | 'organisation'
@@ -139,6 +140,95 @@ export async function linkJobNoteContext(args: {
       createdBy: args.staffProfileId,
     },
   ]);
+}
+
+export async function linkDailySiteUpdateContext(args: {
+  updateId: string;
+  organisationId: string;
+  jobId: string;
+  stageId: string | null;
+  reportDate: string;
+  staffProfileId: string | null;
+  ccProjectId?: string | null;
+  ccJobId?: string | null;
+}) {
+  const links: ContextLinkInput[] = [
+    {
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'organisation',
+      targetId: args.organisationId,
+      relationshipType: 'also_linked_to',
+      createdBy: args.staffProfileId,
+    },
+    {
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'job',
+      targetId: args.jobId,
+      relationshipType: 'lives_in',
+      createdBy: args.staffProfileId,
+    },
+    {
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'date',
+      targetDate: args.reportDate,
+      relationshipType: 'scheduled_on',
+      createdBy: args.staffProfileId,
+    },
+    {
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'crew',
+      targetId: args.staffProfileId,
+      relationshipType: 'assigned_to',
+      createdBy: args.staffProfileId,
+    },
+  ];
+
+  if (args.stageId) {
+    links.push({
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'stage',
+      targetId: args.stageId,
+      relationshipType: 'also_linked_to',
+      createdBy: args.staffProfileId,
+    });
+    links.push({
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'schedule_item',
+      targetExternalId: scheduleItemKey(args.stageId, args.reportDate),
+      relationshipType: 'scheduled_on',
+      createdBy: args.staffProfileId,
+    });
+  }
+
+  if (args.ccProjectId) {
+    links.push({
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'cc_project',
+      targetExternalId: args.ccProjectId,
+      relationshipType: 'also_linked_to',
+      createdBy: args.staffProfileId,
+    });
+  }
+
+  if (args.ccJobId) {
+    links.push({
+      sourceType: 'job_daily_site_update',
+      sourceId: args.updateId,
+      targetType: 'cc_job',
+      targetExternalId: args.ccJobId,
+      relationshipType: 'also_linked_to',
+      createdBy: args.staffProfileId,
+    });
+  }
+
+  await createContextLinks(links);
 }
 
 export async function linkJobNoteAttachmentContext(args: {
