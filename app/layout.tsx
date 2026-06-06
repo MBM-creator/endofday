@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { SupabaseAuthHashHandler } from "@/components/SupabaseAuthHashHandler";
 import "./globals.css";
 
 // Avoid static caching so clients get latest HTML/JS (reduces cached old draft-first flow).
@@ -36,6 +37,7 @@ export default function RootLayout({
         <meta httpEquiv="Pragma" content="no-cache" />
       </head>
       <body className="antialiased">
+        <SupabaseAuthHashHandler />
         {children}
       </body>
     </html>

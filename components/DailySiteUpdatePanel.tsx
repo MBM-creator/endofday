@@ -1,7 +1,5 @@
 'use client';
 
-/* eslint-disable react-hooks/set-state-in-effect */
-
 import { useCallback, useEffect, useState } from 'react';
 import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { DailySiteUpdateHistory, type DailySiteUpdateApiRow } from '@/components/DailySiteUpdateHistory';
@@ -60,6 +58,8 @@ interface DailySiteUpdatePanelProps {
   hideHeaderContext?: boolean;
   hideQaEvidenceWarning?: boolean;
   historyDefaultOpen?: boolean;
+  compactTaskMode?: boolean;
+  formDefaultOpen?: boolean;
 }
 
 const ON_TRACK_OPTIONS: { value: OnTrackStatus; label: string }[] = [
@@ -69,14 +69,28 @@ const ON_TRACK_OPTIONS: { value: OnTrackStatus; label: string }[] = [
   { value: 'unknown', label: 'Unknown' },
 ];
 
+const ON_TRACK_LABELS: Record<OnTrackStatus, string> = {
+  on_track: 'On track',
+  at_risk: 'At risk',
+  off_track: 'Off track',
+  unknown: 'Unknown',
+};
+
+const ON_TRACK_CLASSES: Record<OnTrackStatus, string> = {
+  on_track: 'bg-[#698F00]/10 text-[#4f6f00] border-[#698F00]/20',
+  at_risk: 'bg-amber-50 text-amber-800 border-amber-200',
+  off_track: 'bg-red-50 text-red-800 border-red-200',
+  unknown: 'bg-gray-100 text-gray-700 border-gray-200',
+};
+
 const EMPTY_FORM = {
   progressToday: '',
   issuesFaced: '',
-  issuesFacedNone: false,
+  issuesFacedNone: true,
   problemsResolved: '',
-  problemsResolvedNone: false,
+  problemsResolvedNone: true,
   preventionPlan: '',
-  preventionPlanNone: false,
+  preventionPlanNone: true,
   onTrackStatus: 'on_track' as OnTrackStatus,
   onTrackNotes: '',
 };
@@ -84,6 +98,66 @@ const EMPTY_FORM = {
 function formatHours(value: number | null): string {
   if (value == null || Number.isNaN(value)) return '—';
   return `${value.toFixed(1)} h`;
+}
+
+function formatDateTime(iso: string): string {
+  try {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? ''
+      : d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
+  } catch {
+    return '';
+  }
+}
+
+function progressSnippet(text: string, max = 120): string {
+  const line = text.trim().split('\n')[0] ?? '';
+  if (line.length <= max) return line;
+  return `${line.slice(0, max - 1)}…`;
+}
+
+function YesNoToggle({
+  groupId,
+  label,
+  yesSelected,
+  onChange,
+}: {
+  groupId: string;
+  label: string;
+  yesSelected: boolean;
+  onChange: (yes: boolean) => void;
+}) {
+  const base =
+    'flex-1 rounded-lg border px-4 py-2.5 text-sm font-medium transition-colors min-h-[44px]';
+  const active = 'border-[#698F00] bg-[#698F00]/10 text-[#4f6f00]';
+  const inactive = 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50';
+
+  return (
+    <div>
+      <p id={groupId} className="text-sm font-medium text-gray-700">
+        {label}
+      </p>
+      <div className="mt-2 flex gap-2" role="group" aria-labelledby={groupId}>
+        <button
+          type="button"
+          aria-pressed={!yesSelected}
+          onClick={() => onChange(false)}
+          className={`${base} ${!yesSelected ? active : inactive}`}
+        >
+          No
+        </button>
+        <button
+          type="button"
+          aria-pressed={yesSelected}
+          onClick={() => onChange(true)}
+          className={`${base} ${yesSelected ? active : inactive}`}
+        >
+          Yes
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export function DailySiteUpdatePanel({
@@ -94,7 +168,10 @@ export function DailySiteUpdatePanel({
   hideHeaderContext = false,
   hideQaEvidenceWarning = false,
   historyDefaultOpen = true,
+  compactTaskMode = false,
+  formDefaultOpen,
 }: DailySiteUpdatePanelProps) {
+  const resolvedFormDefaultOpen = formDefaultOpen ?? !compactTaskMode;
   const [bundle, setBundle] = useState<TodayBundle | null>(null);
   const [updates, setUpdates] = useState<DailySiteUpdateApiRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -105,6 +182,7 @@ export function DailySiteUpdatePanel({
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [showVoided, setShowVoided] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(historyDefaultOpen);
+  const [formOpen, setFormOpen] = useState(resolvedFormDefaultOpen);
   const [form, setForm] = useState(EMPTY_FORM);
 
   const canViewVoided =
@@ -171,10 +249,34 @@ export function DailySiteUpdatePanel({
       .catch(() => {});
   }, [canViewVoided, showVoided, loadList]);
 
+  const reportDate = bundle?.reportDate ?? '';
+  const todayUpdates = updates.filter((u) => u.reportDate === reportDate && !u.voidedAt);
+  const submittedToday = todayUpdates.length > 0;
+  const latestToday = submittedToday
+    ? todayUpdates.reduce((latest, current) =>
+        new Date(current.submittedAt) >= new Date(latest.submittedAt) ? current : latest
+      )
+    : null;
+
   const notesRequired =
     form.onTrackStatus === 'at_risk' ||
     form.onTrackStatus === 'off_track' ||
     form.onTrackStatus === 'unknown';
+
+  const showOnTrackNotes =
+    notesRequired || form.onTrackNotes.trim().length > 0;
+
+  const showForm = !compactTaskMode || formOpen;
+
+  function openForm() {
+    setSubmitError(null);
+    setFormOpen(true);
+  }
+
+  function hideForm() {
+    setFormOpen(false);
+    setSubmitError(null);
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -212,6 +314,9 @@ export function DailySiteUpdatePanel({
       setSubmitSuccess(
         data.savedAtJobLevelOnly ? NO_ACTIVE_STAGE_WARNING : 'Daily site update submitted.'
       );
+      if (compactTaskMode) {
+        setFormOpen(false);
+      }
       await refresh();
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Failed to submit');
@@ -235,6 +340,7 @@ export function DailySiteUpdatePanel({
       if (!res.ok || !data.ok) {
         throw new Error(typeof data.message === 'string' ? data.message : 'Failed to void update');
       }
+      setSubmitSuccess(null);
       await refresh();
     } finally {
       setVoidingId(null);
@@ -265,253 +371,326 @@ export function DailySiteUpdatePanel({
     <div className="space-y-4">
       <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Daily site update</h2>
-        {!hideHeaderContext && (
-          <>
-            <p className="mt-1 text-sm text-gray-600">{jobName}</p>
-            <ClientConnectJobSummary
-              job={job}
-              compact
-              className="mt-1"
-              emptyText="No Client Connect project linked."
-            />
 
-            {activeStage ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="text-sm font-medium text-[#698F00]">{activeStage.name}</span>
-                {activeStage.cc_section_trade && (
-                  <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-                    {activeStage.cc_section_trade.replace(/_/g, ' ')}
+        {compactTaskMode && !formOpen && (
+          <div className="mt-3 space-y-4">
+            <p className="text-sm font-medium text-gray-900">
+              {submittedToday ? 'Submitted today' : 'Not submitted today'}
+            </p>
+
+            {latestToday && (
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3 space-y-2">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{latestToday.authorName}</p>
+                    {latestToday.submittedAt && (
+                      <p className="text-xs text-gray-500">{formatDateTime(latestToday.submittedAt)}</p>
+                    )}
+                  </div>
+                  <span
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-medium ${ON_TRACK_CLASSES[latestToday.onTrackStatus]}`}
+                  >
+                    {ON_TRACK_LABELS[latestToday.onTrackStatus]}
                   </span>
+                </div>
+                {latestToday.progressToday.trim() && (
+                  <p className="text-sm text-gray-700">{progressSnippet(latestToday.progressToday)}</p>
                 )}
               </div>
-            ) : (
-              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-                {NO_ACTIVE_STAGE_WARNING}
+            )}
+
+            {submitSuccess && submittedToday && (
+              <p className="text-sm text-[#698F00]">{submitSuccess}</p>
+            )}
+
+            <button
+              type="button"
+              onClick={openForm}
+              className="block w-full rounded-lg bg-[#698F00] px-4 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-[#5a7d00] sm:w-auto"
+            >
+              {submittedToday ? 'Add another update' : 'Add daily update'}
+            </button>
+
+            {!historyOpen && (
+              <button
+                type="button"
+                onClick={() => setHistoryOpen(true)}
+                className="block py-2 text-sm font-medium text-[#698F00] hover:underline"
+              >
+                Show daily update history
+              </button>
+            )}
+          </div>
+        )}
+
+        {showForm && (
+          <>
+            {!hideHeaderContext && (
+              <>
+                <p className="mt-1 text-sm text-gray-600">{jobName}</p>
+                <ClientConnectJobSummary
+                  job={job}
+                  compact
+                  className="mt-1"
+                  emptyText="No Client Connect project linked."
+                />
+
+                {activeStage ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <span className="text-sm font-medium text-[#698F00]">{activeStage.name}</span>
+                    {activeStage.cc_section_trade && (
+                      <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                        {activeStage.cc_section_trade.replace(/_/g, ' ')}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                    {NO_ACTIVE_STAGE_WARNING}
+                  </div>
+                )}
+              </>
+            )}
+
+            {progressContext && (
+              <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  Progress context
+                </p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Read-only labour budget context from this stage. Actual time tracking is not integrated yet.
+                </p>
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <dt className="text-xs text-gray-500">Planned</dt>
+                    <dd className="font-medium text-gray-900">{formatHours(progressContext.plannedHours)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-gray-500">Used</dt>
+                    <dd className="font-medium text-gray-900">{formatHours(progressContext.hoursUsed)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-xs text-gray-500">Remaining</dt>
+                    <dd className="font-medium text-gray-900">{formatHours(progressContext.hoursRemaining)}</dd>
+                  </div>
+                </dl>
               </div>
             )}
+
+            {qaWarning && !hideQaEvidenceWarning && (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {qaWarning.message}
+              </div>
+            )}
+
+            {compactTaskMode && formOpen && (
+              <button
+                type="button"
+                onClick={hideForm}
+                className="mt-4 py-2 text-sm font-medium text-[#698F00] hover:underline"
+              >
+                Hide form
+              </button>
+            )}
+
+            <form onSubmit={handleSubmit} className="mt-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-progress">
+                  What progress was made today?
+                </label>
+                <textarea
+                  id="dsu-progress"
+                  required
+                  rows={3}
+                  maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
+                  value={form.progressToday}
+                  onChange={(e) => setForm((prev) => ({ ...prev, progressToday: e.target.value }))}
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <YesNoToggle
+                  groupId="dsu-issues-toggle"
+                  label="Any issues today?"
+                  yesSelected={!form.issuesFacedNone}
+                  onChange={(yes) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      issuesFacedNone: !yes,
+                      issuesFaced: yes ? prev.issuesFaced : '',
+                    }))
+                  }
+                />
+                {!form.issuesFacedNone && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-issues">
+                      What issues did you face?
+                    </label>
+                    <textarea
+                      id="dsu-issues"
+                      required
+                      rows={2}
+                      maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
+                      value={form.issuesFaced}
+                      onChange={(e) => setForm((prev) => ({ ...prev, issuesFaced: e.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <YesNoToggle
+                  groupId="dsu-resolved-toggle"
+                  label="Any problems resolved today?"
+                  yesSelected={!form.problemsResolvedNone}
+                  onChange={(yes) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      problemsResolvedNone: !yes,
+                      problemsResolved: yes ? prev.problemsResolved : '',
+                    }))
+                  }
+                />
+                {!form.problemsResolvedNone && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-resolved">
+                      What problems did you resolve?
+                    </label>
+                    <textarea
+                      id="dsu-resolved"
+                      required
+                      rows={2}
+                      maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
+                      value={form.problemsResolved}
+                      onChange={(e) => setForm((prev) => ({ ...prev, problemsResolved: e.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <YesNoToggle
+                  groupId="dsu-prevention-toggle"
+                  label="Any prevention action required?"
+                  yesSelected={!form.preventionPlanNone}
+                  onChange={(yes) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      preventionPlanNone: !yes,
+                      preventionPlan: yes ? prev.preventionPlan : '',
+                    }))
+                  }
+                />
+                {!form.preventionPlanNone && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-prevention">
+                      How can we eliminate/prevent those problems in future?
+                    </label>
+                    <textarea
+                      id="dsu-prevention"
+                      required
+                      rows={2}
+                      maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
+                      value={form.preventionPlan}
+                      onChange={(e) => setForm((prev) => ({ ...prev, preventionPlan: e.target.value }))}
+                      className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-on-track">
+                  Are we on track?
+                </label>
+                <select
+                  id="dsu-on-track"
+                  value={form.onTrackStatus}
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      onTrackStatus: e.target.value as OnTrackStatus,
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                >
+                  {ON_TRACK_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {showOnTrackNotes && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-on-track-notes">
+                    On-track notes{notesRequired ? ' (required)' : ''}
+                  </label>
+                  <textarea
+                    id="dsu-on-track-notes"
+                    rows={2}
+                    maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
+                    required={notesRequired}
+                    value={form.onTrackNotes}
+                    onChange={(e) => setForm((prev) => ({ ...prev, onTrackNotes: e.target.value }))}
+                    className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+
+              {submitError && <p className="text-sm text-red-700">{submitError}</p>}
+              {!compactTaskMode && submitSuccess && (
+                <p className="text-sm text-[#698F00]">{submitSuccess}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className="block w-full rounded-lg bg-[#698F00] px-4 py-3 text-sm font-medium text-white hover:bg-[#5a7d00] disabled:opacity-50 sm:w-auto"
+              >
+                {submitting ? 'Submitting…' : 'Submit daily site update'}
+              </button>
+            </form>
           </>
         )}
-
-        {progressContext && (
-          <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-              Progress context
-            </p>
-            <p className="mt-1 text-xs text-gray-500">
-              Read-only labour budget context from this stage. Actual time tracking is not integrated yet.
-            </p>
-            <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
-              <div>
-                <dt className="text-xs text-gray-500">Planned</dt>
-                <dd className="font-medium text-gray-900">{formatHours(progressContext.plannedHours)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Used</dt>
-                <dd className="font-medium text-gray-900">{formatHours(progressContext.hoursUsed)}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-gray-500">Remaining</dt>
-                <dd className="font-medium text-gray-900">{formatHours(progressContext.hoursRemaining)}</dd>
-              </div>
-            </dl>
-          </div>
-        )}
-
-        {qaWarning && !hideQaEvidenceWarning && (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            {qaWarning.message}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-5 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-progress">
-              What progress was made today?
-            </label>
-            <textarea
-              id="dsu-progress"
-              required
-              rows={3}
-              maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
-              value={form.progressToday}
-              onChange={(e) => setForm((prev) => ({ ...prev, progressToday: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-issues">
-                What issues did you face?
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={form.issuesFacedNone}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      issuesFacedNone: e.target.checked,
-                      issuesFaced: e.target.checked ? '' : prev.issuesFaced,
-                    }))
-                  }
-                />
-                No issues today
-              </label>
-            </div>
-            <textarea
-              id="dsu-issues"
-              rows={2}
-              maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
-              disabled={form.issuesFacedNone}
-              value={form.issuesFaced}
-              onChange={(e) => setForm((prev) => ({ ...prev, issuesFaced: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
-            />
-          </div>
-
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-resolved">
-                What problems did you resolve?
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={form.problemsResolvedNone}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      problemsResolvedNone: e.target.checked,
-                      problemsResolved: e.target.checked ? '' : prev.problemsResolved,
-                    }))
-                  }
-                />
-                Nothing resolved today
-              </label>
-            </div>
-            <textarea
-              id="dsu-resolved"
-              rows={2}
-              maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
-              disabled={form.problemsResolvedNone}
-              value={form.problemsResolved}
-              onChange={(e) => setForm((prev) => ({ ...prev, problemsResolved: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
-            />
-          </div>
-
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-prevention">
-                How can we eliminate/prevent those problems in future?
-              </label>
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={form.preventionPlanNone}
-                  onChange={(e) =>
-                    setForm((prev) => ({
-                      ...prev,
-                      preventionPlanNone: e.target.checked,
-                      preventionPlan: e.target.checked ? '' : prev.preventionPlan,
-                    }))
-                  }
-                />
-                No prevention action required
-              </label>
-            </div>
-            <textarea
-              id="dsu-prevention"
-              rows={2}
-              maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
-              disabled={form.preventionPlanNone}
-              value={form.preventionPlan}
-              onChange={(e) => setForm((prev) => ({ ...prev, preventionPlan: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:bg-gray-100"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-on-track">
-              Are we on track?
-            </label>
-            <select
-              id="dsu-on-track"
-              value={form.onTrackStatus}
-              onChange={(e) =>
-                setForm((prev) => ({
-                  ...prev,
-                  onTrackStatus: e.target.value as OnTrackStatus,
-                }))
-              }
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            >
-              {ON_TRACK_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700" htmlFor="dsu-on-track-notes">
-              On-track notes{notesRequired ? ' (required)' : ''}
-            </label>
-            <textarea
-              id="dsu-on-track-notes"
-              rows={2}
-              maxLength={DAILY_SITE_UPDATE_MAX_FIELD_LENGTH}
-              required={notesRequired}
-              value={form.onTrackNotes}
-              onChange={(e) => setForm((prev) => ({ ...prev, onTrackNotes: e.target.value }))}
-              className="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
-            />
-          </div>
-
-          {submitError && <p className="text-sm text-red-700">{submitError}</p>}
-          {submitSuccess && <p className="text-sm text-[#698F00]">{submitSuccess}</p>}
-
-          <button
-            type="submit"
-            disabled={submitting}
-            className="rounded-lg bg-[#698F00] px-4 py-2 text-sm font-medium text-white hover:bg-[#5a7d00] disabled:opacity-50"
-          >
-            {submitting ? 'Submitting…' : 'Submit daily site update'}
-          </button>
-        </form>
       </div>
 
-      {!historyOpen ? (
-        <button
-          type="button"
-          onClick={() => setHistoryOpen(true)}
-          className="py-2 text-sm font-medium text-[#698F00] hover:underline"
-        >
-          Show daily update history
-        </button>
-      ) : (
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setHistoryOpen(false)}
-            className="py-2 text-sm font-medium text-[#698F00] hover:underline"
-          >
-            Hide daily update history
-          </button>
-          <DailySiteUpdateHistory
-            orgSlug={orgSlug}
-            jobId={jobId}
-            updates={updates}
-            showVoided={showVoided}
-            onToggleShowVoided={() => setShowVoided((prev) => !prev)}
-            canViewVoided={canViewVoided}
-            onVoid={handleVoid}
-            voidingId={voidingId}
-          />
-        </div>
-      )}
+      {(!compactTaskMode || historyOpen) &&
+        (!historyOpen ? (
+          !compactTaskMode && (
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="py-2 text-sm font-medium text-[#698F00] hover:underline"
+            >
+              Show daily update history
+            </button>
+          )
+        ) : (
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(false)}
+              className="py-2 text-sm font-medium text-[#698F00] hover:underline"
+            >
+              Hide daily update history
+            </button>
+            <DailySiteUpdateHistory
+              orgSlug={orgSlug}
+              jobId={jobId}
+              updates={updates}
+              showVoided={showVoided}
+              onToggleShowVoided={() => setShowVoided((prev) => !prev)}
+              canViewVoided={canViewVoided}
+              onVoid={handleVoid}
+              voidingId={voidingId}
+            />
+          </div>
+        ))}
     </div>
   );
 }
