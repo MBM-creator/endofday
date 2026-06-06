@@ -57,6 +57,9 @@ interface DailySiteUpdatePanelProps {
   jobId: string;
   jobName: string;
   job: JobSummary;
+  hideHeaderContext?: boolean;
+  hideQaEvidenceWarning?: boolean;
+  historyDefaultOpen?: boolean;
 }
 
 const ON_TRACK_OPTIONS: { value: OnTrackStatus; label: string }[] = [
@@ -83,7 +86,15 @@ function formatHours(value: number | null): string {
   return `${value.toFixed(1)} h`;
 }
 
-export function DailySiteUpdatePanel({ orgSlug, jobId, jobName, job }: DailySiteUpdatePanelProps) {
+export function DailySiteUpdatePanel({
+  orgSlug,
+  jobId,
+  jobName,
+  job,
+  hideHeaderContext = false,
+  hideQaEvidenceWarning = false,
+  historyDefaultOpen = true,
+}: DailySiteUpdatePanelProps) {
   const [bundle, setBundle] = useState<TodayBundle | null>(null);
   const [updates, setUpdates] = useState<DailySiteUpdateApiRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -93,6 +104,7 @@ export function DailySiteUpdatePanel({ orgSlug, jobId, jobName, job }: DailySite
   const [submitting, setSubmitting] = useState(false);
   const [voidingId, setVoidingId] = useState<string | null>(null);
   const [showVoided, setShowVoided] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(historyDefaultOpen);
   const [form, setForm] = useState(EMPTY_FORM);
 
   const canViewVoided =
@@ -253,27 +265,31 @@ export function DailySiteUpdatePanel({ orgSlug, jobId, jobName, job }: DailySite
     <div className="space-y-4">
       <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900">Daily site update</h2>
-        <p className="mt-1 text-sm text-gray-600">{jobName}</p>
-        <ClientConnectJobSummary
-          job={job}
-          compact
-          className="mt-1"
-          emptyText="No Client Connect project linked."
-        />
+        {!hideHeaderContext && (
+          <>
+            <p className="mt-1 text-sm text-gray-600">{jobName}</p>
+            <ClientConnectJobSummary
+              job={job}
+              compact
+              className="mt-1"
+              emptyText="No Client Connect project linked."
+            />
 
-        {activeStage ? (
-          <div className="mt-2 flex flex-wrap gap-2">
-            <span className="text-sm font-medium text-[#698F00]">{activeStage.name}</span>
-            {activeStage.cc_section_trade && (
-              <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
-                {activeStage.cc_section_trade.replace(/_/g, ' ')}
-              </span>
+            {activeStage ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="text-sm font-medium text-[#698F00]">{activeStage.name}</span>
+                {activeStage.cc_section_trade && (
+                  <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                    {activeStage.cc_section_trade.replace(/_/g, ' ')}
+                  </span>
+                )}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                {NO_ACTIVE_STAGE_WARNING}
+              </div>
             )}
-          </div>
-        ) : (
-          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            {NO_ACTIVE_STAGE_WARNING}
-          </div>
+          </>
         )}
 
         {progressContext && (
@@ -301,7 +317,7 @@ export function DailySiteUpdatePanel({ orgSlug, jobId, jobName, job }: DailySite
           </div>
         )}
 
-        {qaWarning && (
+        {qaWarning && !hideQaEvidenceWarning && (
           <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
             {qaWarning.message}
           </div>
@@ -467,16 +483,35 @@ export function DailySiteUpdatePanel({ orgSlug, jobId, jobName, job }: DailySite
         </form>
       </div>
 
-      <DailySiteUpdateHistory
-        orgSlug={orgSlug}
-        jobId={jobId}
-        updates={updates}
-        showVoided={showVoided}
-        onToggleShowVoided={() => setShowVoided((prev) => !prev)}
-        canViewVoided={canViewVoided}
-        onVoid={handleVoid}
-        voidingId={voidingId}
-      />
+      {!historyOpen ? (
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          className="py-2 text-sm font-medium text-[#698F00] hover:underline"
+        >
+          Show daily update history
+        </button>
+      ) : (
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(false)}
+            className="py-2 text-sm font-medium text-[#698F00] hover:underline"
+          >
+            Hide daily update history
+          </button>
+          <DailySiteUpdateHistory
+            orgSlug={orgSlug}
+            jobId={jobId}
+            updates={updates}
+            showVoided={showVoided}
+            onToggleShowVoided={() => setShowVoided((prev) => !prev)}
+            canViewVoided={canViewVoided}
+            onVoid={handleVoid}
+            voidingId={voidingId}
+          />
+        </div>
+      )}
     </div>
   );
 }

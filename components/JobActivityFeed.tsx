@@ -67,6 +67,8 @@ interface JobActivityFeedProps {
   stages?: StageOption[];
   activeStageId?: string | null;
   compact?: boolean;
+  defaultCollapsed?: boolean;
+  collapsedTitle?: string;
 }
 
 const ACCEPTED_VIDEO_TYPES = JOB_NOTE_VIDEO_MIME_TYPES.join(',');
@@ -161,9 +163,12 @@ export function JobActivityFeed({
   stages = [],
   activeStageId = null,
   compact = false,
+  defaultCollapsed = false,
+  collapsedTitle = 'Notes, photos and videos',
 }: JobActivityFeedProps) {
+  const [expanded, setExpanded] = useState(!defaultCollapsed);
   const [notes, setNotes] = useState<JobNote[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!defaultCollapsed);
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [stageId, setStageId] = useState<string>(activeStageId ?? '');
@@ -203,8 +208,9 @@ export function JobActivityFeed({
   }, [jobId, orgSlug]);
 
   useEffect(() => {
+    if (defaultCollapsed && !expanded) return;
     loadNotes();
-  }, [loadNotes]);
+  }, [loadNotes, defaultCollapsed, expanded]);
 
   function handleVideoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0] ?? null;
@@ -431,15 +437,46 @@ export function JobActivityFeed({
     }
   }
 
+  if (defaultCollapsed && !expanded) {
+    return (
+      <section className={compact ? 'space-y-4' : 'mt-8 space-y-4'}>
+        <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+          <h2 className="text-lg font-semibold text-gray-900">{collapsedTitle}</h2>
+          <button
+            type="button"
+            onClick={() => {
+              setExpanded(true);
+              setLoading(true);
+            }}
+            className="mt-3 py-2 text-sm font-medium text-[#698F00] hover:underline"
+          >
+            Add or view notes
+          </button>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className={compact ? 'space-y-4' : 'mt-8 space-y-4'}>
       <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-gray-900">Notes, photos and videos</h2>
-        {!loading && notes.length > 0 && (
-          <button type="button" onClick={loadNotes} className="text-sm font-medium text-[#698F00] hover:underline">
-            Refresh
-          </button>
-        )}
+        <h2 className="text-lg font-semibold text-gray-900">{collapsedTitle}</h2>
+        <div className="flex items-center gap-3">
+          {defaultCollapsed && (
+            <button
+              type="button"
+              onClick={() => setExpanded(false)}
+              className="text-sm font-medium text-[#698F00] hover:underline"
+            >
+              Hide notes
+            </button>
+          )}
+          {!loading && notes.length > 0 && (
+            <button type="button" onClick={loadNotes} className="text-sm font-medium text-[#698F00] hover:underline">
+              Refresh
+            </button>
+          )}
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm space-y-3">

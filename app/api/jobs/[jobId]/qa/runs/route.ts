@@ -57,7 +57,13 @@ export async function GET(
   }
 
   const ccProject = await loadCcProjectForJob(v.job, requestId);
-  const res = NextResponse.json({ ok: true, job: v.job, ccProject, runs: rows ?? [] });
+  const res = NextResponse.json({
+    ok: true,
+    job: v.job,
+    ccProject,
+    runs: rows ?? [],
+    viewerRole: staffAuth.staff.role,
+  });
   res.headers.set('x-request-id', requestId);
   return res;
 }

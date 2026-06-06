@@ -9,6 +9,7 @@ import { ClientConnectJobSummary } from '@/components/ClientConnectJobSummary';
 import { DailySiteUpdatePanel } from '@/components/DailySiteUpdatePanel';
 import { JobActivityFeed } from '@/components/JobActivityFeed';
 import type { CcProject } from '@/lib/cc-client';
+import type { StaffRole } from '@/lib/daily-site-update-shared';
 
 interface Job {
   id: string;
@@ -96,6 +97,7 @@ export default function TodaysWorkPage() {
   const [ccProject, setCcProject] = useState<CcProject | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
   const [runs, setRuns] = useState<QaRun[]>([]);
+  const [viewerRole, setViewerRole] = useState<StaffRole>('field');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -130,6 +132,9 @@ export default function TodaysWorkPage() {
         setJob(runsData.job && typeof runsData.job === 'object' ? runsData.job : null);
         setCcProject(runsData.ccProject && typeof runsData.ccProject === 'object' ? runsData.ccProject : null);
         setRuns(Array.isArray(runsData.runs) ? runsData.runs : []);
+        if (runsData.viewerRole === 'field' || runsData.viewerRole === 'supervisor' || runsData.viewerRole === 'admin') {
+          setViewerRole(runsData.viewerRole);
+        }
 
         const { res: stagesRes, data: stagesData } = stagesResult;
         if (stagesRes.ok && stagesData?.ok && Array.isArray(stagesData.stages)) {
@@ -204,16 +209,6 @@ export default function TodaysWorkPage() {
               )}
             </div>
 
-            <DailySiteUpdatePanel orgSlug={orgSlug} jobId={jobId} jobName={job.name} job={job} />
-
-            <JobActivityFeed
-              orgSlug={orgSlug}
-              jobId={jobId}
-              stages={stages.map((stage) => ({ id: stage.id, name: stage.name }))}
-              activeStageId={job.active_stage_id ?? null}
-              compact
-            />
-
             {!job.active_stage_id && (
               <div className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm">
                 <p className="text-gray-700">No active stage set. Set the active stage on the job detail page.</p>
@@ -229,17 +224,22 @@ export default function TodaysWorkPage() {
                 <p className="mt-1 text-gray-700">
                   Continue the active QA run for today&apos;s work.
                 </p>
-                <Link
-                  href={runHref(orgSlug, jobId, activeRun, activeStage, ccProject)}
-                  className="mt-4 inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
-                >
-                  Continue QA run →
-                </Link>
-                {activeRuns.length > 1 && (
-                  <Link href={qaHubHref} className="ml-3 mt-4 inline-block py-2 px-4 rounded-lg font-medium text-[#698F00] border border-[#698F00]/30 hover:bg-[#698F00]/5 transition-colors">
-                    View all QA
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                  <Link
+                    href={runHref(orgSlug, jobId, activeRun, activeStage, ccProject)}
+                    className="block w-full rounded-lg bg-[#698F00] px-4 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-[#5a7d00] sm:w-auto"
+                  >
+                    Continue QA run →
                   </Link>
-                )}
+                  {activeRuns.length > 1 && (
+                    <Link
+                      href={qaHubHref}
+                      className="block w-full rounded-lg border border-[#698F00]/30 px-4 py-3 text-center text-sm font-medium text-[#698F00] transition-colors hover:bg-[#698F00]/5 sm:w-auto"
+                    >
+                      View all QA
+                    </Link>
+                  )}
+                </div>
               </div>
             )}
 
@@ -249,14 +249,17 @@ export default function TodaysWorkPage() {
                 <p className="mt-1 text-gray-700">
                   There is no active QA run. Supervisors can choose the next required QA checklist from the QA hub.
                 </p>
-                <div className="mt-4 flex flex-wrap gap-3">
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
                   <Link
                     href={runHref(orgSlug, jobId, latestApprovedRun, activeStage, ccProject)}
-                    className="inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                    className="block w-full rounded-lg bg-[#698F00] px-4 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-[#5a7d00] sm:w-auto"
                   >
                     View latest QA
                   </Link>
-                  <Link href={qaHubHref} className="inline-block py-2 px-4 rounded-lg font-medium text-[#698F00] border border-[#698F00]/30 hover:bg-[#698F00]/5 transition-colors">
+                  <Link
+                    href={qaHubHref}
+                    className="block w-full rounded-lg border border-[#698F00]/30 px-4 py-3 text-center text-sm font-medium text-[#698F00] transition-colors hover:bg-[#698F00]/5 sm:w-auto"
+                  >
                     Open QA hub
                   </Link>
                 </div>
@@ -269,19 +272,42 @@ export default function TodaysWorkPage() {
                 <p className="mt-1 text-gray-700">
                   Start from the QA hub so the supervisor can select the checklist needed for this stage or project.
                 </p>
-                {hasLegacyRuns && (
+                {hasLegacyRuns && viewerRole !== 'field' && (
                   <p className="mt-2 text-sm text-amber-800">
-                    Legacy QA runs exist for this job, but they are not treated as current V2 runs.
+                    Older QA records exist.{' '}
+                    <Link href={qaHubHref} className="font-medium text-[#698F00] hover:underline">
+                      View history in the QA hub
+                    </Link>
+                    .
                   </p>
                 )}
                 <Link
                   href={qaHubHref}
-                  className="mt-4 inline-block py-2 px-4 rounded-lg font-medium text-white bg-[#698F00] hover:bg-[#5a7d00] transition-colors"
+                  className="mt-4 block w-full rounded-lg bg-[#698F00] px-4 py-3 text-center text-sm font-medium text-white transition-colors hover:bg-[#5a7d00] sm:inline-block sm:w-auto"
                 >
                   Open QA hub
                 </Link>
               </div>
             )}
+
+            <DailySiteUpdatePanel
+              orgSlug={orgSlug}
+              jobId={jobId}
+              jobName={job.name}
+              job={job}
+              hideHeaderContext
+              hideQaEvidenceWarning
+              historyDefaultOpen={false}
+            />
+
+            <JobActivityFeed
+              orgSlug={orgSlug}
+              jobId={jobId}
+              stages={stages.map((stage) => ({ id: stage.id, name: stage.name }))}
+              activeStageId={job.active_stage_id ?? null}
+              compact
+              defaultCollapsed
+            />
           </div>
         )}
       </div>
