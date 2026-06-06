@@ -712,14 +712,19 @@ export default function PavingQaSectionPage() {
   useEffect(() => {
     if (!orgSlug || !jobId || !runId) return;
     let cancelled = false;
-    setLoading(true);
-    setV2PhotosByItem({});
-    setV2PhotosLoaded(false);
-    setV1PhotosByItem({});
-    setV1PhotosLoaded(false);
-    fetch(`/api/jobs/${jobId}/qa/runs/${runId}?orgSlug=${encodeURIComponent(orgSlug)}`)
-      .then((r) => r.json().then((d) => ({ r, d })))
-      .then(({ r, d }) => {
+
+    void (async () => {
+      setLoading(true);
+      setV2PhotosByItem({});
+      setV2PhotosLoaded(false);
+      setV1PhotosByItem({});
+      setV1PhotosLoaded(false);
+
+      try {
+        const r = await fetch(
+          `/api/jobs/${jobId}/qa/runs/${runId}?orgSlug=${encodeURIComponent(orgSlug)}`
+        );
+        const d = await r.json();
         if (cancelled) return;
         if (!r.ok) {
           setError(typeof d?.message === 'string' ? d.message : 'Failed to load');
@@ -866,13 +871,13 @@ export default function PavingQaSectionPage() {
             });
         }
         setError(null);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setError('Failed to load');
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
