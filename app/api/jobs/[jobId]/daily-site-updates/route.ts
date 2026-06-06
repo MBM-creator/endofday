@@ -43,7 +43,7 @@ const UPDATE_SELECT = `
   voided_at,
   voided_by_staff_profile_id,
   void_reason,
-  staff_profiles(full_name),
+  staff_profiles!job_daily_site_updates_author_staff_profile_id_fkey(full_name),
   stages(name)
 `;
 
